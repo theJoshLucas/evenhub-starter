@@ -27,6 +27,9 @@ const ui = {
   qrUrl: $("qrUrl"),
   qrTimestamp: $("qrTimestamp"),
   qrCode: $("qrCode"),
+  stepStatusQr: $("stepStatusQr"),
+  stepStatusBoot: $("stepStatusBoot"),
+  stepStatusHello: $("stepStatusHello"),
 };
 
 const state = {
@@ -65,6 +68,24 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+
+function setStepStatus(el, status) {
+  const map = {
+    not_run: { text: "not run", className: "step-status not-run" },
+    success: { text: "success", className: "step-status success" },
+    failed: { text: "failed", className: "step-status failed" },
+  };
+  const s = map[status] ?? map.not_run;
+  el.textContent = s.text;
+  el.className = s.className;
+}
+
+function resetTestingSteps() {
+  setStepStatus(ui.stepStatusQr, "not_run");
+  setStepStatus(ui.stepStatusBoot, "not_run");
+  setStepStatus(ui.stepStatusHello, "not_run");
+}
+
 function buildGitHubPagesUrl() {
   const owner = "theJoshLucas";
   const repo = "evenhub-starter";
@@ -101,9 +122,11 @@ function generateQrForGlassesTest() {
 
     matrixSet("qrTest.url", url);
     matrixSet("qrTest.timestamp", timestamp);
+    setStepStatus(ui.stepStatusQr, "success");
     log("Generated glasses test QR:", { url, timestamp });
   } catch (e) {
     log("Generate QR ERROR:", String(e));
+    setStepStatus(ui.stepStatusQr, "failed");
     matrixSet("qrTest.error", String(e));
   }
 }
@@ -190,11 +213,13 @@ async function boot() {
       matrixSet("events.evenHubEvent.error", String(e));
     }
 
+    setStepStatus(ui.stepStatusBoot, "success");
     log("Boot complete.");
   } catch (e) {
     log("Boot FAILED:", String(e));
     setStatus(ui.sdkStatus, false, "failed ❌");
     setStatus(ui.bridgeStatus, false, "failed ❌");
+    setStepStatus(ui.stepStatusBoot, "failed");
     matrixSet("boot.error", String(e));
   } finally {
     ui.btnBoot.disabled = false;
@@ -309,12 +334,15 @@ async function runHelloWorldDemo() {
     matrixSet("helloWorldDemo.lastResult", lastResult);
 
     if (success) {
+      setStepStatus(ui.stepStatusHello, "success");
       log("Hello world demo complete ✅");
     } else {
+      setStepStatus(ui.stepStatusHello, "failed");
       log("Hello world demo failed ❌ (see matrix + logs)");
     }
   } catch (e) {
     log("Hello world demo ERROR:", String(e));
+    setStepStatus(ui.stepStatusHello, "failed");
     matrixSet("helloWorldDemo.ok", false);
     matrixSet("helloWorldDemo.error", String(e));
   } finally {
@@ -454,6 +482,7 @@ ui.btnStartMic.addEventListener("click", () => probeAudio(true));
 ui.btnStopMic.addEventListener("click", () => probeAudio(false));
 ui.btnGenerateQr.addEventListener("click", generateQrForGlassesTest);
 
-// Auto-prepare a fresh QR for device testing and boot bridge probes
+// Initialize testing step indicators and auto-prepare first run
+resetTestingSteps();
 generateQrForGlassesTest();
 boot();

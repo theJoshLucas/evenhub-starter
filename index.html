@@ -56,6 +56,20 @@
     .muted { opacity: 0.75; }
     .tiny { font-size: 12px; }
     .status-lines { margin: 0; }
+    .steps { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+    .step-line { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+    .step-desc { font-size: 0.92rem; }
+    .step-status {
+      font-size: 12px;
+      border: 1px solid #8884;
+      border-radius: 999px;
+      padding: 2px 8px;
+      background: #8882;
+      font-weight: 700;
+    }
+    .step-status.not-run { color: #666; }
+    .step-status.success { color: #0a7; }
+    .step-status.failed { color: #c21; }
     #qrCode img,
     #qrCode canvas {
       max-width: 100%;
@@ -96,6 +110,35 @@
     <p class="tiny"><strong>URL:</strong> <span id="qrUrl">(not generated yet)</span></p>
     <p class="tiny"><strong>Timestamp:</strong> <span id="qrTimestamp">(not generated yet)</span></p>
     <div id="qrCode" aria-label="QR code output"></div>
+  </div>
+
+
+  <div class="card">
+    <h2>Testing Steps (Recommended Order)</h2>
+    <p class="muted">Follow these in order for a repeatable glasses test.</p>
+    <ol class="steps">
+      <li>
+        <div class="step-line">
+          <strong>Generate fresh QR</strong>
+          <span id="stepStatusQr" class="step-status not-run">not run</span>
+        </div>
+        <div class="step-desc muted">Click <strong>Generate QR for Glasses Test</strong> so you scan a fresh cache-busted URL.</div>
+      </li>
+      <li>
+        <div class="step-line">
+          <strong>Connect bridge</strong>
+          <span id="stepStatusBoot" class="step-status not-run">not run</span>
+        </div>
+        <div class="step-desc muted">Click <strong>Boot / Reconnect</strong> and confirm Bridge ready becomes ready.</div>
+      </li>
+      <li>
+        <div class="step-line">
+          <strong>Run hello world demo</strong>
+          <span id="stepStatusHello" class="step-status not-run">not run</span>
+        </div>
+        <div class="step-desc muted">Click <strong>Run Hello World Demo</strong> and watch for startup page created.</div>
+      </li>
+    </ol>
   </div>
 
   <div class="grid">

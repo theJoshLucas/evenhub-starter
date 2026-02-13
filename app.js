@@ -12,6 +12,7 @@ const ui = {
   log: $("log"),
   matrix: $("matrix"),
   btnBoot: $("btnBoot"),
+  btnHelloWorld: $("btnHelloWorld"),
   btnGetUser: $("btnGetUser"),
   btnGetDevice: $("btnGetDevice"),
   btnCreateStartup: $("btnCreateStartup"),
@@ -22,6 +23,18 @@ const ui = {
   btnGetLS: $("btnGetLS"),
   btnStartMic: $("btnStartMic"),
   btnStopMic: $("btnStopMic"),
+  btnGenerateQr: $("btnGenerateQr"),
+  qrUrl: $("qrUrl"),
+  qrTimestamp: $("qrTimestamp"),
+  qrCode: $("qrCode"),
+  stepStatusQr: $("stepStatusQr"),
+  stepStatusBoot: $("stepStatusBoot"),
+  stepStatusHello: $("stepStatusHello"),
+  journalNotes: $("journalNotes"),
+  btnJournalConfirm: $("btnJournalConfirm"),
+  btnJournalReset: $("btnJournalReset"),
+  journalList: $("journalList"),
+  journalEmpty: $("journalEmpty"),
 };
 
 const state = {
@@ -35,6 +48,7 @@ const state = {
   },
   // Capabilities matrix you’re building (in-memory)
   matrix: {},
+  journal: [],
 };
 
 function now() {
@@ -54,6 +68,156 @@ function setStatus(el, ok, text) {
 function matrixSet(key, value) {
   state.matrix[key] = value;
   ui.matrix.textContent = JSON.stringify(state.matrix, null, 2);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+
+function setStepStatus(el, status) {
+  const map = {
+    not_run: { text: "not run", className: "step-status not-run" },
+    success: { text: "success", className: "step-status success" },
+    failed: { text: "failed", className: "step-status failed" },
+  };
+  const s = map[status] ?? map.not_run;
+  el.textContent = s.text;
+  el.className = s.className;
+}
+
+function resetTestingSteps() {
+  setStepStatus(ui.stepStatusQr, "not_run");
+  setStepStatus(ui.stepStatusBoot, "not_run");
+  setStepStatus(ui.stepStatusHello, "not_run");
+}
+
+
+const JOURNAL_STORAGE_KEY = "starterKit.developerJournal";
+
+function saveJournal() {
+  localStorage.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(state.journal));
+}
+
+function renderJournal() {
+  ui.journalList.innerHTML = "";
+
+  if (!state.journal.length) {
+    ui.journalEmpty.style.display = "block";
+    return;
+  }
+
+  ui.journalEmpty.style.display = "none";
+
+  for (const item of [...state.journal].reverse()) {
+    const li = document.createElement("li");
+    li.className = "journal-item";
+
+    const meta = document.createElement("div");
+    meta.className = "journal-meta";
+    meta.textContent = `${item.timestamp} · ${item.outcome}`;
+
+    const note = document.createElement("div");
+    note.textContent = item.notes;
+
+    li.appendChild(meta);
+    li.appendChild(note);
+    ui.journalList.appendChild(li);
+  }
+}
+
+function loadJournal() {
+  try {
+    const raw = localStorage.getItem(JOURNAL_STORAGE_KEY);
+    if (!raw) {
+      state.journal = [];
+      renderJournal();
+      return;
+    }
+
+    const parsed = JSON.parse(raw);
+    state.journal = Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    log("Journal load ERROR:", String(e));
+    state.journal = [];
+  }
+
+  renderJournal();
+}
+
+function getCurrentOutcomeSummary() {
+  const boot = state.matrix["bridge.ready"] ? "bridge ready" : "bridge not ready";
+  const hello = state.matrix["helloWorldDemo.ok"] ? "hello world success" : "hello world not confirmed";
+  return `${boot}, ${hello}`;
+}
+
+function recordConfirmedSuccess() {
+  const noteText = ui.journalNotes.value.trim();
+  const notes = noteText || "Confirmed success (no extra notes).";
+
+  const entry = {
+    timestamp: now(),
+    notes,
+    outcome: getCurrentOutcomeSummary(),
+  };
+
+  state.journal.push(entry);
+  saveJournal();
+  renderJournal();
+  ui.journalNotes.value = "";
+  log("Developer Journal entry added:", entry);
+}
+
+function resetJournal() {
+  state.journal = [];
+  saveJournal();
+  renderJournal();
+  log("Developer Journal reset.");
+}
+
+function buildGitHubPagesUrl() {
+  const owner = "theJoshLucas";
+  const repo = "evenhub-starter";
+  return `https://${owner}.github.io/${repo}/index.html`;
+}
+
+function buildCacheBustedUrl() {
+  const base = buildGitHubPagesUrl();
+  const stamp = Date.now();
+  const url = new URL(base);
+  url.searchParams.set("cb", String(stamp));
+  return {
+    url: url.toString(),
+    timestamp: new Date(stamp).toISOString(),
+  };
+}
+
+function generateQrForGlassesTest() {
+  try {
+    const qrLib = window.QRCode;
+    if (!qrLib) throw new Error("QRCode library is not loaded.");
+
+    const { url, timestamp } = buildCacheBustedUrl();
+    ui.qrUrl.textContent = url;
+    ui.qrTimestamp.textContent = timestamp;
+
+    ui.qrCode.innerHTML = "";
+    new qrLib(ui.qrCode, {
+      text: url,
+      width: 220,
+      height: 220,
+      correctLevel: qrLib.CorrectLevel.M,
+    });
+
+    matrixSet("qrTest.url", url);
+    matrixSet("qrTest.timestamp", timestamp);
+    setStepStatus(ui.stepStatusQr, "success");
+    log("Generated glasses test QR:", { url, timestamp });
+  } catch (e) {
+    log("Generate QR ERROR:", String(e));
+    setStepStatus(ui.stepStatusQr, "failed");
+    matrixSet("qrTest.error", String(e));
+  }
 }
 
 // ---- SDK loading (try a couple CDNs) ----
@@ -138,11 +302,13 @@ async function boot() {
       matrixSet("events.evenHubEvent.error", String(e));
     }
 
+    setStepStatus(ui.stepStatusBoot, "success");
     log("Boot complete.");
   } catch (e) {
     log("Boot FAILED:", String(e));
     setStatus(ui.sdkStatus, false, "failed ❌");
     setStatus(ui.bridgeStatus, false, "failed ❌");
+    setStepStatus(ui.stepStatusBoot, "failed");
     matrixSet("boot.error", String(e));
   } finally {
     ui.btnBoot.disabled = false;
@@ -220,6 +386,56 @@ async function probeCreateStartup() {
     setStatus(ui.startupStatus, false, "failed ❌");
     matrixSet("createStartUpPageContainer.ok", false);
     matrixSet("createStartUpPageContainer.error", String(e));
+  }
+}
+
+async function runHelloWorldDemo() {
+  ui.btnHelloWorld.disabled = true;
+  try {
+    log("Hello world demo starting...");
+    matrixSet("helloWorldDemo.startedAt", now());
+
+    await boot();
+
+    const attempts = 3;
+    let lastResult = null;
+    let success = false;
+
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      log(`Hello world attempt ${attempt}/${attempts}`);
+      await probeCreateStartup();
+
+      const createOk = state.matrix["createStartUpPageContainer.ok"];
+      lastResult = state.matrix["createStartUpPageContainer.result"];
+      if (createOk) {
+        success = true;
+        break;
+      }
+
+      if (attempt < attempts) {
+        log("Startup create failed; waiting 1200ms before retry...");
+        await sleep(1200);
+      }
+    }
+
+    matrixSet("helloWorldDemo.attempts", attempts);
+    matrixSet("helloWorldDemo.ok", success);
+    matrixSet("helloWorldDemo.lastResult", lastResult);
+
+    if (success) {
+      setStepStatus(ui.stepStatusHello, "success");
+      log("Hello world demo complete ✅");
+    } else {
+      setStepStatus(ui.stepStatusHello, "failed");
+      log("Hello world demo failed ❌ (see matrix + logs)");
+    }
+  } catch (e) {
+    log("Hello world demo ERROR:", String(e));
+    setStepStatus(ui.stepStatusHello, "failed");
+    matrixSet("helloWorldDemo.ok", false);
+    matrixSet("helloWorldDemo.error", String(e));
+  } finally {
+    ui.btnHelloWorld.disabled = false;
   }
 }
 
@@ -342,6 +558,7 @@ async function probeAudio(on) {
 
 // ---- Wire up UI ----
 ui.btnBoot.addEventListener("click", boot);
+ui.btnHelloWorld.addEventListener("click", runHelloWorldDemo);
 ui.btnGetUser.addEventListener("click", probeGetUserInfo);
 ui.btnGetDevice.addEventListener("click", probeGetDeviceInfo);
 ui.btnCreateStartup.addEventListener("click", probeCreateStartup);
@@ -352,6 +569,12 @@ ui.btnSetLS.addEventListener("click", probeSetLocalStorage);
 ui.btnGetLS.addEventListener("click", probeGetLocalStorage);
 ui.btnStartMic.addEventListener("click", () => probeAudio(true));
 ui.btnStopMic.addEventListener("click", () => probeAudio(false));
+ui.btnGenerateQr.addEventListener("click", generateQrForGlassesTest);
+ui.btnJournalConfirm.addEventListener("click", recordConfirmedSuccess);
+ui.btnJournalReset.addEventListener("click", resetJournal);
 
-// Auto-boot on load (nice for QR workflow)
+// Initialize testing step indicators and auto-prepare first run
+resetTestingSteps();
+loadJournal();
+generateQrForGlassesTest();
 boot();

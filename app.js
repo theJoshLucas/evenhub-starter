@@ -7,6 +7,7 @@ const ui = {
   testTitle: $("testTitle"),
   testGoal: $("testGoal"),
   lookForViewer: $("lookForViewer"),
+  lookForViewerPage2: $("lookForViewerPage2"),
   btnRunTest: $("btnRunTest"),
   runStatus: $("runStatus"),
   btnYes: $("btnYes"),
@@ -224,6 +225,7 @@ async function probeCreateStartup(expectedText) {
 
 async function runTestFlow() {
   const test = state.currentTest;
+  ui.lookForViewerPage2.textContent = `\n\n${state.expectedText}\n\n`;
   ui.runStatus.textContent = "Running test…";
   ui.runStatus.className = "status";
   ui.btnRunTest.disabled = true;
@@ -330,6 +332,7 @@ function resetPage1(advanceCounter) {
   ui.testTitle.textContent = `Test #${state.currentTestNumber}: ${state.currentTest.title}`;
   ui.testGoal.textContent = state.currentTest.goal;
   ui.lookForViewer.textContent = `\n\n${state.expectedText}\n\n`;
+  ui.lookForViewerPage2.textContent = `\n\n${state.expectedText}\n\n`;
 
   ui.runStatus.textContent = "";
   ui.runStatus.className = "status";

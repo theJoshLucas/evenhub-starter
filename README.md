@@ -1,44 +1,78 @@
 # Even Hub Starter Kit (Probe + Template)
 
-This is a **no-build**, GitHub-Pages-friendly starter kit for Even Hub plugins.
+Zero-build, GitHub-Pages-friendly starter kit for validating Even Hub SDK behavior on real hardware.
 
-It gives you:
-- A button-driven **probe harness** to test each SDK method on real hardware
-- An auto-updating **capabilities matrix** (what works, what returns, what fails)
-- A clean base you can clone for future plugins
+## What this project is
+This repo is a **developer probe harness**, not a polished user product yet.
 
-## Files
-- `index.html` – UI + buttons + log output
-- `app.js` – SDK loader + probes + matrix capture
+It provides:
+- Button-driven probes for common Even Hub SDK methods.
+- Runtime status pills (SDK load, bridge readiness, startup page state).
+- In-memory capabilities matrix that captures what worked vs failed.
 
-## How to run (GitHub Pages)
-1. Put these files in a folder in your repo (or root).
-2. In GitHub: **Settings → Pages**
-3. Source: **Deploy from a branch**
-4. Branch: `main` (or whatever) and folder: `/ (root)` or `/docs` depending on where you placed files
-5. Save.
+## Ground truth dependency
+### SDK
+- **Package:** `@evenrealities/even_hub_sdk`
+- **Version used:** `0.0.7`
+- **Current load path:** dynamic import from CDN in `app.js`.
 
-After a minute, GitHub will show a Pages URL like:
+Load order in code:
+1. `https://esm.sh/@evenrealities/even_hub_sdk@0.0.7`
+2. `https://unpkg.com/@evenrealities/even_hub_sdk@0.0.7/dist/index.js`
 
-`https://<username>.github.io/<repo>/path/to/index.html`
+### Minimal usage snippet (from this repo)
+```js
+const { waitForEvenAppBridge, EvenAppBridge } = await import(
+  "https://esm.sh/@evenrealities/even_hub_sdk@0.0.7"
+);
+EvenAppBridge.getInstance();
+const bridge = await waitForEvenAppBridge();
+const user = await bridge.getUserInfo();
+```
 
-Use that URL as your Even Hub QR target.
+## Repo tour
+- `index.html` — UI: status pills, probe buttons, log panel, matrix panel.
+- `app.js` — bridge boot flow, SDK loading, probe implementations, matrix updates.
+- `CAPABILITIES.md` — template for recording method-level results.
+- `docs/BASELINE.md` — current run-state and known failures.
+- `docs/SDK_NOTES.md` — discovered API surfaces and hello-world path.
 
-## Why Pages URL matters
-Raw GitHub URLs often:
-- return `text/plain`
-- don’t send the right headers for module loading
-- get blocked or displayed as source
+## How to run
+### Option A: local smoke check (desktop)
+```bash
+python3 -m http.server 4173
+```
+Open `http://localhost:4173/index.html`.
 
-Pages serves proper HTML + JS over HTTPS with sane headers.
+What you should see:
+- UI loads.
+- Boot may fail due to missing Even runtime bridge (expected outside device runtime).
 
-## Notes
-- The SDK import tries:
-  1) esm.sh
-  2) unpkg (dist/index.js)
-  If one fails, the other usually works.
+### Option B: target Even runtime (recommended)
+1. Host this folder over HTTPS (GitHub Pages recommended).
+2. Use the hosted URL in Even Hub QR target flow.
+3. Click **Boot / Reconnect**.
+4. Click **createStartUpPageContainer()** for hello-world validation.
 
-- The matrix is in-memory. If you want persistence, we can add:
-  - “Download matrix.json”
-  - “Save matrix to Even local storage”
-  - “POST matrix to your server”
+## Smallest reproducible hello-world (core integration)
+1. Launch in Even runtime.
+2. Click **Boot / Reconnect** until `Bridge ready: ready ✅`.
+3. Click **createStartUpPageContainer()**.
+4. Confirm startup status updates and inspect log + matrix output.
+
+## Current constraints
+- Device/runtime dependency: full validation requires Even bridge (`flutter_inappwebview`).
+- SDK/platform are pilot-stage; behavior can change.
+- Discord + official Even Hub channels are upstream truth for latest guidance.
+
+Official sources:
+- Pilot article: https://support.evenrealities.com/hc/en-us/articles/34380533765145-Even-Hub-Pilot-Program
+- Developer portal: https://evenhub.evenrealities.com/
+
+## Documentation index
+- `docs/BASELINE.md`
+- `docs/PRODUCT.md`
+- `docs/FEATURE_PLAN.md`
+- `docs/SDK_NOTES.md`
+- `docs/TROUBLESHOOTING.md`
+- `docs/TODO_UNKNOWNs.md`

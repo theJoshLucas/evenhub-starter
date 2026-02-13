@@ -12,6 +12,7 @@ const ui = {
   log: $("log"),
   matrix: $("matrix"),
   btnBoot: $("btnBoot"),
+  btnHelloWorld: $("btnHelloWorld"),
   btnGetUser: $("btnGetUser"),
   btnGetDevice: $("btnGetDevice"),
   btnCreateStartup: $("btnCreateStartup"),
@@ -54,6 +55,10 @@ function setStatus(el, ok, text) {
 function matrixSet(key, value) {
   state.matrix[key] = value;
   ui.matrix.textContent = JSON.stringify(state.matrix, null, 2);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ---- SDK loading (try a couple CDNs) ----
@@ -223,6 +228,53 @@ async function probeCreateStartup() {
   }
 }
 
+async function runHelloWorldDemo() {
+  ui.btnHelloWorld.disabled = true;
+  try {
+    log("Hello world demo starting...");
+    matrixSet("helloWorldDemo.startedAt", now());
+
+    await boot();
+
+    const attempts = 3;
+    let lastResult = null;
+    let success = false;
+
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      log(`Hello world attempt ${attempt}/${attempts}`);
+      await probeCreateStartup();
+
+      const createOk = state.matrix["createStartUpPageContainer.ok"];
+      lastResult = state.matrix["createStartUpPageContainer.result"];
+      if (createOk) {
+        success = true;
+        break;
+      }
+
+      if (attempt < attempts) {
+        log("Startup create failed; waiting 1200ms before retry...");
+        await sleep(1200);
+      }
+    }
+
+    matrixSet("helloWorldDemo.attempts", attempts);
+    matrixSet("helloWorldDemo.ok", success);
+    matrixSet("helloWorldDemo.lastResult", lastResult);
+
+    if (success) {
+      log("Hello world demo complete ✅");
+    } else {
+      log("Hello world demo failed ❌ (see matrix + logs)");
+    }
+  } catch (e) {
+    log("Hello world demo ERROR:", String(e));
+    matrixSet("helloWorldDemo.ok", false);
+    matrixSet("helloWorldDemo.error", String(e));
+  } finally {
+    ui.btnHelloWorld.disabled = false;
+  }
+}
+
 async function probeTextUpgrade() {
   const bridge = await ensureBridge();
   try {
@@ -342,6 +394,7 @@ async function probeAudio(on) {
 
 // ---- Wire up UI ----
 ui.btnBoot.addEventListener("click", boot);
+ui.btnHelloWorld.addEventListener("click", runHelloWorldDemo);
 ui.btnGetUser.addEventListener("click", probeGetUserInfo);
 ui.btnGetDevice.addEventListener("click", probeGetDeviceInfo);
 ui.btnCreateStartup.addEventListener("click", probeCreateStartup);

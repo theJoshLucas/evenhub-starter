@@ -51,14 +51,14 @@ What you should see:
 ### Option B: target Even runtime (recommended)
 1. Host this folder over HTTPS (GitHub Pages recommended).
 2. Use the hosted URL in Even Hub QR target flow.
-3. Click **Boot / Reconnect**.
-4. Click **createStartUpPageContainer()** for hello-world validation.
+3. Click **Run Hello World Demo** (recommended) or **Boot / Reconnect**.
+4. The demo will auto-try `createStartUpPageContainer()` up to 3 times with a short delay.
 
 ## Smallest reproducible hello-world (core integration)
 1. Launch in Even runtime.
-2. Click **Boot / Reconnect** until `Bridge ready: ready ✅`.
-3. Click **createStartUpPageContainer()**.
-4. Confirm startup status updates and inspect log + matrix output.
+2. Click **Run Hello World Demo**.
+3. Wait for up to 3 startup-create attempts (about ~3-5 seconds total).
+4. Confirm `Startup page: created ✅` and `helloWorldDemo.ok: true` in the matrix panel.
 
 ## Current constraints
 - Device/runtime dependency: full validation requires Even bridge (`flutter_inappwebview`).

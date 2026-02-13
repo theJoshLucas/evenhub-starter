@@ -265,7 +265,6 @@ async function probeRebuild() {
           height: 80,
           containerID: state.container.containerID,
           containerName: state.container.containerName,
-          isEventCapture: 1,
           content: `Rebuild @ ${now()}`,
         },
       ],

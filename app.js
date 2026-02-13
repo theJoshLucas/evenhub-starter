@@ -263,7 +263,7 @@ async function probeRebuild() {
           yPosition: 0,
           width: 480,
           height: 80,
-          borderWidth: 1,
+          borderRdaius: 8,
           containerID: state.container.containerID,
           containerName: state.container.containerName,
           content: `Rebuild @ ${now()}`,

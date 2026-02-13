@@ -89,8 +89,34 @@
       background: #126ad1;
       border-color: #126ad1;
     }
-    .yes { border-color: #b7ebcc; color: #0f7a46; }
-    .no { border-color: #f3c3be; color: #a0251b; }
+    .btn-flat-blue {
+      background: #1e6bff;
+      border-color: #1e6bff;
+      color: #fff;
+      font-weight: 600;
+    }
+    .btn-flat-blue:hover {
+      background: #1557d6;
+      border-color: #1557d6;
+    }
+    .btn-flat-black {
+      background: #111827;
+      border-color: #111827;
+      color: #fff;
+    }
+    .btn-flat-black:hover {
+      background: #030712;
+      border-color: #030712;
+    }
+    .btn-flat-white {
+      background: #fff;
+      border-color: #c4c8d1;
+      color: #1f2937;
+    }
+    .btn-flat-white:hover {
+      background: #f2f4f7;
+      border-color: #b5bcc7;
+    }
     textarea {
       width: 100%;
       min-height: 160px;
@@ -137,9 +163,9 @@
         <div id="lookForViewerPage2" class="code-viewer"></div>
       </div>
       <div class="btn-row">
-        <button id="btnYes" class="yes">Yes</button>
-        <button id="btnNo" class="no">No</button>
-        <button id="btnNotSure">Not Sure</button>
+        <button id="btnYes" class="btn-flat-blue">Yes</button>
+        <button id="btnNo" class="btn-flat-black">No</button>
+        <button id="btnNotSure" class="btn-flat-white">Not Sure</button>
       </div>
       <div id="detailsWrap" hidden>
         <p class="muted">Please explain what you experienced.</p>

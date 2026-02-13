@@ -30,6 +30,11 @@ const ui = {
   stepStatusQr: $("stepStatusQr"),
   stepStatusBoot: $("stepStatusBoot"),
   stepStatusHello: $("stepStatusHello"),
+  journalNotes: $("journalNotes"),
+  btnJournalConfirm: $("btnJournalConfirm"),
+  btnJournalReset: $("btnJournalReset"),
+  journalList: $("journalList"),
+  journalEmpty: $("journalEmpty"),
 };
 
 const state = {
@@ -43,6 +48,7 @@ const state = {
   },
   // Capabilities matrix you’re building (in-memory)
   matrix: {},
+  journal: [],
 };
 
 function now() {
@@ -84,6 +90,89 @@ function resetTestingSteps() {
   setStepStatus(ui.stepStatusQr, "not_run");
   setStepStatus(ui.stepStatusBoot, "not_run");
   setStepStatus(ui.stepStatusHello, "not_run");
+}
+
+
+const JOURNAL_STORAGE_KEY = "starterKit.developerJournal";
+
+function saveJournal() {
+  localStorage.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(state.journal));
+}
+
+function renderJournal() {
+  ui.journalList.innerHTML = "";
+
+  if (!state.journal.length) {
+    ui.journalEmpty.style.display = "block";
+    return;
+  }
+
+  ui.journalEmpty.style.display = "none";
+
+  for (const item of [...state.journal].reverse()) {
+    const li = document.createElement("li");
+    li.className = "journal-item";
+
+    const meta = document.createElement("div");
+    meta.className = "journal-meta";
+    meta.textContent = `${item.timestamp} · ${item.outcome}`;
+
+    const note = document.createElement("div");
+    note.textContent = item.notes;
+
+    li.appendChild(meta);
+    li.appendChild(note);
+    ui.journalList.appendChild(li);
+  }
+}
+
+function loadJournal() {
+  try {
+    const raw = localStorage.getItem(JOURNAL_STORAGE_KEY);
+    if (!raw) {
+      state.journal = [];
+      renderJournal();
+      return;
+    }
+
+    const parsed = JSON.parse(raw);
+    state.journal = Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    log("Journal load ERROR:", String(e));
+    state.journal = [];
+  }
+
+  renderJournal();
+}
+
+function getCurrentOutcomeSummary() {
+  const boot = state.matrix["bridge.ready"] ? "bridge ready" : "bridge not ready";
+  const hello = state.matrix["helloWorldDemo.ok"] ? "hello world success" : "hello world not confirmed";
+  return `${boot}, ${hello}`;
+}
+
+function recordConfirmedSuccess() {
+  const noteText = ui.journalNotes.value.trim();
+  const notes = noteText || "Confirmed success (no extra notes).";
+
+  const entry = {
+    timestamp: now(),
+    notes,
+    outcome: getCurrentOutcomeSummary(),
+  };
+
+  state.journal.push(entry);
+  saveJournal();
+  renderJournal();
+  ui.journalNotes.value = "";
+  log("Developer Journal entry added:", entry);
+}
+
+function resetJournal() {
+  state.journal = [];
+  saveJournal();
+  renderJournal();
+  log("Developer Journal reset.");
 }
 
 function buildGitHubPagesUrl() {
@@ -481,8 +570,11 @@ ui.btnGetLS.addEventListener("click", probeGetLocalStorage);
 ui.btnStartMic.addEventListener("click", () => probeAudio(true));
 ui.btnStopMic.addEventListener("click", () => probeAudio(false));
 ui.btnGenerateQr.addEventListener("click", generateQrForGlassesTest);
+ui.btnJournalConfirm.addEventListener("click", recordConfirmedSuccess);
+ui.btnJournalReset.addEventListener("click", resetJournal);
 
 // Initialize testing step indicators and auto-prepare first run
 resetTestingSteps();
+loadJournal();
 generateQrForGlassesTest();
 boot();

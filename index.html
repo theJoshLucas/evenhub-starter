@@ -70,6 +70,19 @@
     .step-status.not-run { color: #666; }
     .step-status.success { color: #0a7; }
     .step-status.failed { color: #c21; }
+    textarea {
+      width: 100%;
+      min-height: 88px;
+      border-radius: 10px;
+      border: 1px solid #8884;
+      padding: 10px;
+      background: #8882;
+      color: inherit;
+      font: inherit;
+    }
+    .journal-list { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 8px; }
+    .journal-item { border: 1px solid #8883; border-radius: 10px; padding: 8px; background: #8881; }
+    .journal-meta { font-size: 12px; opacity: 0.8; }
     #qrCode img,
     #qrCode canvas {
       max-width: 100%;
@@ -139,6 +152,20 @@
         <div class="step-desc muted">Click <strong>Run Hello World Demo</strong> and watch for startup page created.</div>
       </li>
     </ol>
+  </div>
+
+
+  <div class="card">
+    <h2>Developer Journal (saved on this device)</h2>
+    <p class="muted">Record confirmed wins as you test. Entries are cumulative and stay after refresh.</p>
+    <label class="tiny" for="journalNotes"><strong>Notes for this confirmation</strong></label>
+    <textarea id="journalNotes" placeholder="Example: Startup page created on glasses after scan + hello world run."></textarea>
+    <div class="row">
+      <button id="btnJournalConfirm">Record Confirmed Success</button>
+      <button id="btnJournalReset">Reset Journal</button>
+    </div>
+    <ol id="journalList" class="journal-list"></ol>
+    <p id="journalEmpty" class="tiny muted">No confirmations yet.</p>
   </div>
 
   <div class="grid">

@@ -1,5 +1,5 @@
 // Even Hub Starter Kit - no build step
-// Human-assisted real-device testing helper (not automatic validation).
+// Guided "Next Test" flow + local journal + exportable repo run file.
 
 const $ = (id) => document.getElementById(id);
 
@@ -10,8 +10,16 @@ const ui = {
   startupStatus: $("startupStatus"),
   log: $("log"),
   matrix: $("matrix"),
-  btnBoot: $("btnBoot"),
-  btnHelloWorld: $("btnHelloWorld"),
+  btnRunNextTest: $("btnRunNextTest"),
+  runState: $("runState"),
+  confirmationSection: $("confirmationSection"),
+  notesInput: $("notesInput"),
+  btnExportRun: $("btnExportRun"),
+  lastSavedMessage: $("lastSavedMessage"),
+  nextTestTitle: $("nextTestTitle"),
+  nextTestGoal: $("nextTestGoal"),
+  nextTestLookFor: $("nextTestLookFor"),
+  advancedSearch: $("advancedSearch"),
   btnGetUser: $("btnGetUser"),
   btnGetDevice: $("btnGetDevice"),
   btnCreateStartup: $("btnCreateStartup"),
@@ -22,46 +30,41 @@ const ui = {
   btnGetLS: $("btnGetLS"),
   btnStartMic: $("btnStartMic"),
   btnStopMic: $("btnStopMic"),
-  btnGenerateQr: $("btnGenerateQr"),
-  qrUrl: $("qrUrl"),
-  qrTimestamp: $("qrTimestamp"),
-  qrCode: $("qrCode"),
-  stepStatusQr: $("stepStatusQr"),
-  stepStatusBoot: $("stepStatusBoot"),
-  stepStatusHello: $("stepStatusHello"),
-  stepStatusJournal: $("stepStatusJournal"),
-  journalOutcome: $("journalOutcome"),
-  journalNotes: $("journalNotes"),
-  btnJournalConfirm: $("btnJournalConfirm"),
-  btnJournalReset: $("btnJournalReset"),
-  btnCopySummary: $("btnCopySummary"),
-  btnCopyFullReport: $("btnCopyFullReport"),
-  btnDownloadReport: $("btnDownloadReport"),
-  journalList: $("journalList"),
-  journalEmpty: $("journalEmpty"),
-  journalSummary: $("journalSummary"),
-  advancedSearch: $("advancedSearch"),
+};
+
+const NEXT_TEST = {
+  id: "hello-world-startup",
+  title: "Hello World startup page appears on glasses",
+  goal: "Verify startup page creation can be triggered from this page.",
+  lookFor: [
+    "A new startup message appears on the glasses display.",
+    "No obvious crash/freeze while loading.",
+    "Result appears within a few seconds of running test.",
+  ],
 };
 
 const state = {
   SDK: null,
   bridge: null,
-  container: { containerTotalNum: 1, containerID: 1, containerName: "t1" },
   matrix: {},
-  journal: [],
+  runs: [],
+  pendingRun: null,
 };
 
-const JOURNAL_STORAGE_KEY = "starterKit.developerJournal.v2";
+const RUN_STORAGE_KEY = "starterKit.testingRuns.v1";
 
-function now() {
-  return new Date().toISOString().replace("T", " ").replace("Z", "");
+function isoNow() {
+  return new Date().toISOString();
+}
+
+function nowForLog() {
+  return isoNow().replace("T", " ").replace("Z", "");
 }
 
 function log(...args) {
   const line = args.map((a) => (typeof a === "string" ? a : JSON.stringify(a, null, 2))).join(" ");
-  ui.log.textContent += `[${now()}] ${line}\n`;
+  ui.log.textContent += `[${nowForLog()}] ${line}\n`;
   ui.log.scrollTop = ui.log.scrollHeight;
-  console.log(...args);
 }
 
 function setStatus(el, ok, text) {
@@ -74,222 +77,77 @@ function matrixSet(key, value) {
   ui.matrix.textContent = JSON.stringify(state.matrix, null, 2);
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function saveRuns() {
+  localStorage.setItem(RUN_STORAGE_KEY, JSON.stringify(state.runs));
 }
 
-function setStepStatus(el, status) {
-  const map = {
-    not_run: { text: "not run", className: "step-status not-run" },
-    running: { text: "running", className: "step-status running" },
-    success: { text: "success", className: "step-status success" },
-    failed: { text: "failed", className: "step-status failed" },
-  };
-  const s = map[status] ?? map.not_run;
-  el.textContent = s.text;
-  el.className = s.className;
-}
-
-function resetTestingSteps() {
-  setStepStatus(ui.stepStatusQr, "not_run");
-  setStepStatus(ui.stepStatusBoot, "not_run");
-  setStepStatus(ui.stepStatusHello, "not_run");
-  setStepStatus(ui.stepStatusJournal, "not_run");
-}
-
-function saveJournal() {
-  localStorage.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(state.journal));
-}
-
-function getCurrentOutcomeSummary() {
-  const boot = state.matrix["bridge.ready"] ? "bridge ready" : "bridge not ready";
-  const hello = state.matrix["helloWorldDemo.ok"] ? "hello world success" : "hello world not confirmed";
-  return `${boot}, ${hello}`;
-}
-
-function renderJournalSummary() {
-  const wins = state.journal.filter((entry) => entry.outcomeType === "success").length;
-  const failures = state.journal.filter((entry) => entry.outcomeType === "failure").length;
-  const lastEntry = state.journal.at(-1);
-  const lastRun = lastEntry?.timestamp ?? "(none yet)";
-  const lastUrl = state.matrix["qrTest.url"] ?? "(generate QR to capture)";
-
-  ui.journalSummary.innerHTML = [
-    `<div><strong>Wins:</strong> ${wins}</div>`,
-    `<div><strong>Failures:</strong> ${failures}</div>`,
-    `<div><strong>Last run:</strong> ${lastRun}</div>`,
-    `<div><strong>Last URL:</strong> ${lastUrl}</div>`,
-  ].join("");
-}
-
-function renderJournal() {
-  ui.journalList.innerHTML = "";
-  if (!state.journal.length) {
-    ui.journalEmpty.style.display = "block";
-    renderJournalSummary();
-    return;
-  }
-
-  ui.journalEmpty.style.display = "none";
-  for (const item of [...state.journal].reverse()) {
-    const li = document.createElement("li");
-    li.className = "journal-item";
-    li.innerHTML = `
-      <div class="journal-meta">${item.timestamp} · ${item.outcomeType} · ${item.outcome}</div>
-      <div>${item.notes}</div>
-      <div class="tiny muted">URL: ${item.url || "(unknown)"}</div>
-    `;
-    ui.journalList.appendChild(li);
-  }
-
-  renderJournalSummary();
-}
-
-function loadJournal() {
+function loadRuns() {
   try {
-    const raw = localStorage.getItem(JOURNAL_STORAGE_KEY);
+    const raw = localStorage.getItem(RUN_STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    state.journal = Array.isArray(parsed) ? parsed : [];
+    state.runs = Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    log("Journal load ERROR:", String(e));
-    state.journal = [];
+    state.runs = [];
+    log("Run history load error:", String(e));
   }
-
-  renderJournal();
 }
 
-function recordJournalEntry() {
-  setStepStatus(ui.stepStatusJournal, "running");
-
-  const notes = ui.journalNotes.value.trim() || "No extra notes.";
-  const outcomeType = ui.journalOutcome.value === "failure" ? "failure" : "success";
-
-  const entry = {
-    timestamp: now(),
-    outcomeType,
-    outcome: getCurrentOutcomeSummary(),
-    notes,
-    url: state.matrix["qrTest.url"] || buildGitHubPagesUrl(),
-  };
-
-  state.journal.push(entry);
-  saveJournal();
-  renderJournal();
-  ui.journalNotes.value = "";
-  setStepStatus(ui.stepStatusJournal, "success");
-  log("Developer Journal entry added:", entry);
+function setRunState(text, className = "") {
+  ui.runState.textContent = text;
+  ui.runState.className = `status-chip ${className}`.trim();
 }
 
-function resetJournal() {
-  state.journal = [];
-  saveJournal();
-  renderJournal();
-  setStepStatus(ui.stepStatusJournal, "not_run");
-  log("Developer Journal reset.");
+function renderNextTest() {
+  ui.nextTestTitle.textContent = NEXT_TEST.title;
+  ui.nextTestGoal.textContent = NEXT_TEST.goal;
+  ui.nextTestLookFor.innerHTML = "";
+  for (const item of NEXT_TEST.lookFor) {
+    const li = document.createElement("li");
+    li.textContent = item;
+    ui.nextTestLookFor.appendChild(li);
+  }
 }
 
-function getStepStatusLabel(el) {
-  return (el?.textContent || "not run").trim().toLowerCase();
+function sanitizeFileText(text) {
+  return text.toLowerCase().replace(/[^a-z0-9\-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
 
-function getRecentLogs(limit = 40) {
-  return (ui.log.textContent || "")
-    .split("\n")
-    .map((line) => line.trimEnd())
-    .filter(Boolean)
-    .slice(-limit);
-}
-
-function buildReportData() {
-  return {
-    generatedAt: new Date().toISOString(),
-    testedUrl: state.matrix["qrTest.url"] || buildGitHubPagesUrl(),
-    testedAt: state.matrix["qrTest.timestamp"] || "(not generated yet)",
-    status: {
-      generatedQr: getStepStatusLabel(ui.stepStatusQr),
-      bridgeConnection: getStepStatusLabel(ui.stepStatusBoot),
-      helloWorldDemo: getStepStatusLabel(ui.stepStatusHello),
-      recordConfirmation: getStepStatusLabel(ui.stepStatusJournal),
-      bridgeReady: !!state.matrix["bridge.ready"],
-      startupPageCreated: !!state.matrix["createStartUpPageContainer.ok"],
-      helloWorldConfirmed: !!state.matrix["helloWorldDemo.ok"],
-      latestOutcomeSummary: getCurrentOutcomeSummary(),
-    },
-    matrixSnapshot: state.matrix,
-    recentLogs: getRecentLogs(),
-    journalSnapshot: state.journal,
-  };
-}
-
-function buildMarkdownSummary() {
-  const data = buildReportData();
+function buildRunMarkdown(run) {
   return [
-    "# Even Hub Test Summary",
-    `- Timestamp: ${data.generatedAt}`,
-    `- Tested URL: ${data.testedUrl}`,
-    `- Current status: ${data.status.latestOutcomeSummary}`,
-    `- Steps: QR=${data.status.generatedQr}, Boot=${data.status.bridgeConnection}, Hello=${data.status.helloWorldDemo}, Journal=${data.status.recordConfirmation}`,
-    `- Journal entries: ${data.journalSnapshot.length}`,
+    `# Test Run: ${run.testTitle}`,
+    "",
+    `- test_id: ${run.testId}`,
+    `- run_at: ${run.runAt}`,
+    `- result: ${run.result}`,
+    `- tested_url: ${run.testedUrl}`,
+    `- bridge_ready: ${run.bridgeReady}`,
+    `- startup_created: ${run.startupCreated}`,
+    "",
+    "## Goal",
+    run.goal,
+    "",
+    "## Expected on glasses",
+    ...run.lookFor.map((line) => `- ${line}`),
+    "",
+    "## Human confirmation",
+    `Answer: ${run.answer}`,
+    "",
+    "## Notes",
+    run.notes || "(none)",
     "",
   ].join("\n");
 }
 
-function buildMarkdownFullReport() {
-  const data = buildReportData();
-  return [
-    "# Even Hub Test Report",
-    "",
-    "## Context",
-    `- Timestamp: ${data.generatedAt}`,
-    `- Tested URL: ${data.testedUrl}`,
-    `- URL timestamp: ${data.testedAt}`,
-    "",
-    "## Current Status Matrix",
-    "```json",
-    JSON.stringify(data.status, null, 2),
-    "```",
-    "",
-    "## Capabilities Matrix Snapshot",
-    "```json",
-    JSON.stringify(data.matrixSnapshot, null, 2),
-    "```",
-    "",
-    "## Recent Logs",
-    "```text",
-    data.recentLogs.length ? data.recentLogs.join("\n") : "(no logs yet)",
-    "```",
-    "",
-    "## Journal Snapshot",
-    "```json",
-    JSON.stringify(data.journalSnapshot, null, 2),
-    "```",
-    "",
-  ].join("\n");
-}
-
-async function copyToClipboard(name, content) {
-  try {
-    await navigator.clipboard.writeText(content);
-    log(`${name}: copied to clipboard ✅`);
-  } catch (e) {
-    log(`${name}: clipboard write failed, opening fallback prompt:`, String(e));
-    window.prompt("Copy the text below:", content);
-  }
-}
-
-function downloadReportMarkdown() {
-  const content = buildMarkdownFullReport();
+function createDownload(filename, content) {
   const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
   const url = URL.createObjectURL(blob);
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const a = document.createElement("a");
   a.href = url;
-  a.download = `evenhub-report-${stamp}.md`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  log("Download Report: markdown file created.");
 }
 
 function buildGitHubPagesUrl() {
@@ -304,31 +162,6 @@ function buildCacheBustedUrl() {
   const url = new URL(base);
   url.searchParams.set("cb", String(stamp));
   return { url: url.toString(), timestamp: new Date(stamp).toISOString() };
-}
-
-function generateQrForGlassesTest() {
-  setStepStatus(ui.stepStatusQr, "running");
-  try {
-    const qrLib = window.QRCode;
-    if (!qrLib) throw new Error("QRCode library is not loaded.");
-
-    const { url, timestamp } = buildCacheBustedUrl();
-    ui.qrUrl.textContent = url;
-    ui.qrTimestamp.textContent = timestamp;
-
-    ui.qrCode.innerHTML = "";
-    new qrLib(ui.qrCode, { text: url, width: 220, height: 220, correctLevel: qrLib.CorrectLevel.M });
-
-    matrixSet("qrTest.url", url);
-    matrixSet("qrTest.timestamp", timestamp);
-    setStepStatus(ui.stepStatusQr, "success");
-    renderJournalSummary();
-    log("Generated glasses test QR:", { url, timestamp });
-  } catch (e) {
-    log("Generate QR ERROR:", String(e));
-    setStepStatus(ui.stepStatusQr, "failed");
-    matrixSet("qrTest.error", String(e));
-  }
 }
 
 async function importSdk() {
@@ -353,8 +186,7 @@ async function importSdk() {
 }
 
 async function boot() {
-  ui.btnBoot.disabled = true;
-  setStepStatus(ui.stepStatusBoot, "running");
+  setRunState("connecting", "running");
   try {
     setStatus(ui.sdkStatus, false, "loading…");
     setStatus(ui.fiawvStatus, false, "checking…");
@@ -375,52 +207,128 @@ async function boot() {
     setStatus(ui.bridgeStatus, true, "ready ✅");
     matrixSet("bridge.ready", true);
 
-    try {
-      state.bridge.onDeviceStatusChanged((status) => {
-        log("deviceStatusChanged:", status);
-        matrixSet("events.deviceStatusChanged.last", status);
-      });
-      matrixSet("events.deviceStatusChanged.subscribed", true);
-    } catch (e) {
-      matrixSet("events.deviceStatusChanged.subscribed", false);
-      matrixSet("events.deviceStatusChanged.error", String(e));
-    }
-
-    try {
-      state.bridge.onEvenHubEvent((event) => {
-        log("evenHubEvent:", event);
-        matrixSet("events.evenHubEvent.last", event);
-      });
-      matrixSet("events.evenHubEvent.subscribed", true);
-    } catch (e) {
-      matrixSet("events.evenHubEvent.subscribed", false);
-      matrixSet("events.evenHubEvent.error", String(e));
-    }
-
-    setStepStatus(ui.stepStatusBoot, "success");
-    log("Boot complete.");
+    return true;
   } catch (e) {
     log("Boot FAILED:", String(e));
     setStatus(ui.sdkStatus, false, "failed ❌");
     setStatus(ui.bridgeStatus, false, "failed ❌");
-    setStepStatus(ui.stepStatusBoot, "failed");
     matrixSet("boot.error", String(e));
-  } finally {
-    ui.btnBoot.disabled = false;
+    return false;
   }
 }
 
 async function ensureBridge() {
-  if (!state.bridge) await boot();
-  if (!state.bridge) throw new Error("Bridge not available (boot failed).");
+  if (!state.bridge) {
+    const ok = await boot();
+    if (!ok || !state.bridge) throw new Error("Bridge not available (boot failed).");
+  }
   return state.bridge;
+}
+
+async function probeCreateStartup() {
+  const bridge = await ensureBridge();
+  try {
+    const { CreateStartUpPageContainer } = state.SDK;
+    const payload = new CreateStartUpPageContainer({
+      containerTotalNum: 1,
+      textObject: [{
+        xPosition: 0,
+        yPosition: 0,
+        width: 480,
+        height: 80,
+        containerID: 1,
+        containerName: "t1",
+        content: `Hello world @ ${nowForLog()}`,
+      }],
+    });
+    const result = await bridge.createStartUpPageContainer(payload);
+    const ok = result === 0 || result === "0";
+    setStatus(ui.startupStatus, ok, ok ? "created ✅" : `failed (${result}) ❌`);
+    matrixSet("createStartUpPageContainer.ok", ok);
+    matrixSet("createStartUpPageContainer.result", result);
+    return ok;
+  } catch (e) {
+    setStatus(ui.startupStatus, false, "failed ❌");
+    matrixSet("createStartUpPageContainer.ok", false);
+    matrixSet("createStartUpPageContainer.error", String(e));
+    return false;
+  }
+}
+
+async function runNextTest() {
+  ui.btnRunNextTest.disabled = true;
+  ui.confirmationSection.hidden = true;
+  ui.btnExportRun.disabled = true;
+  state.pendingRun = null;
+
+  try {
+    setRunState("running", "running");
+    const { url, timestamp } = buildCacheBustedUrl();
+    matrixSet("qrTest.url", url);
+    matrixSet("qrTest.timestamp", timestamp);
+
+    await boot();
+    const startupCreated = await probeCreateStartup();
+
+    state.pendingRun = {
+      testId: NEXT_TEST.id,
+      testTitle: NEXT_TEST.title,
+      goal: NEXT_TEST.goal,
+      lookFor: NEXT_TEST.lookFor,
+      runAt: isoNow(),
+      testedUrl: url,
+      bridgeReady: !!state.matrix["bridge.ready"],
+      startupCreated,
+    };
+
+    ui.confirmationSection.hidden = false;
+    setRunState("waiting for human confirmation", "running");
+    log("Next test finished automation. Waiting for human confirmation.");
+  } catch (e) {
+    setRunState("failed", "failed");
+    log("Run Next Test failed:", String(e));
+  } finally {
+    ui.btnRunNextTest.disabled = false;
+  }
+}
+
+function saveRun(answer) {
+  if (!state.pendingRun) return;
+
+  const normalizedResult = answer === "yes" ? "pass" : answer === "no" ? "fail" : "not-sure";
+  const run = {
+    ...state.pendingRun,
+    answer,
+    result: normalizedResult,
+    notes: (ui.notesInput.value || "").trim(),
+    savedAt: isoNow(),
+  };
+
+  state.runs.push(run);
+  saveRuns();
+
+  const isoName = run.savedAt.replace(/[:.]/g, "-");
+  const filename = `${isoName}__${sanitizeFileText(run.testId)}__${sanitizeFileText(run.result)}.md`;
+  run.exportFile = filename;
+
+  state.pendingRun = run;
+  ui.btnExportRun.disabled = false;
+  ui.lastSavedMessage.textContent = `Saved locally. Ready to export: testing/runs/${filename}`;
+  setRunState(`saved: ${run.result}`, run.result === "pass" ? "success" : run.result === "fail" ? "failed" : "");
+  log("Run saved locally:", run);
+}
+
+function exportRunFile() {
+  if (!state.pendingRun?.exportFile) return;
+  const content = buildRunMarkdown(state.pendingRun);
+  createDownload(state.pendingRun.exportFile, content);
+  log("Exported run file:", state.pendingRun.exportFile);
 }
 
 async function probeGetUserInfo() {
   const bridge = await ensureBridge();
   try {
     const user = await bridge.getUserInfo();
-    log("UserInfo:", user);
     matrixSet("getUserInfo.ok", true);
     matrixSet("getUserInfo.value", user);
   } catch (e) {
@@ -433,7 +341,6 @@ async function probeGetDeviceInfo() {
   const bridge = await ensureBridge();
   try {
     const dev = await bridge.getDeviceInfo();
-    log("DeviceInfo:", dev);
     matrixSet("getDeviceInfo.ok", true);
     matrixSet("getDeviceInfo.value", dev);
   } catch (e) {
@@ -442,71 +349,14 @@ async function probeGetDeviceInfo() {
   }
 }
 
-async function probeCreateStartup() {
-  const bridge = await ensureBridge();
-  try {
-    const { CreateStartUpPageContainer } = state.SDK;
-    const payload = new CreateStartUpPageContainer({
-      containerTotalNum: 1,
-      textObject: [{ xPosition: 0, yPosition: 0, width: 480, height: 80, containerID: 1, containerName: "t1", content: "Hello from EvenHub Starter Kit!" }],
-    });
-    const result = await bridge.createStartUpPageContainer(payload);
-    const ok = result === 0 || result === "success" || result?.toString?.() === "0";
-    setStatus(ui.startupStatus, ok, ok ? "created ✅" : `failed (${result}) ❌`);
-    matrixSet("createStartUpPageContainer.ok", ok);
-    matrixSet("createStartUpPageContainer.result", result);
-  } catch (e) {
-    setStatus(ui.startupStatus, false, "failed ❌");
-    matrixSet("createStartUpPageContainer.ok", false);
-    matrixSet("createStartUpPageContainer.error", String(e));
-  }
-}
-
-async function runHelloWorldDemo() {
-  ui.btnHelloWorld.disabled = true;
-  setStepStatus(ui.stepStatusHello, "running");
-  try {
-    matrixSet("helloWorldDemo.startedAt", now());
-    await boot();
-
-    const attempts = 3;
-    let lastResult = null;
-    let success = false;
-
-    for (let attempt = 1; attempt <= attempts; attempt += 1) {
-      log(`Hello world attempt ${attempt}/${attempts}`);
-      await probeCreateStartup();
-      const createOk = state.matrix["createStartUpPageContainer.ok"];
-      lastResult = state.matrix["createStartUpPageContainer.result"];
-      if (createOk) {
-        success = true;
-        break;
-      }
-      if (attempt < attempts) await sleep(1200);
-    }
-
-    matrixSet("helloWorldDemo.attempts", attempts);
-    matrixSet("helloWorldDemo.ok", success);
-    matrixSet("helloWorldDemo.lastResult", lastResult);
-    setStepStatus(ui.stepStatusHello, success ? "success" : "failed");
-  } catch (e) {
-    setStepStatus(ui.stepStatusHello, "failed");
-    matrixSet("helloWorldDemo.ok", false);
-    matrixSet("helloWorldDemo.error", String(e));
-  } finally {
-    ui.btnHelloWorld.disabled = false;
-  }
-}
-
 async function probeTextUpgrade() {
   const bridge = await ensureBridge();
   try {
     const { TextContainerUpgrade } = state.SDK;
-    const text = `Upgraded @ ${now()}\nIf you see this on the glasses, textContainerUpgrade works.`;
+    const text = `Upgraded @ ${nowForLog()}\nIf you see this on the glasses, textContainerUpgrade works.`;
     const payload = new TextContainerUpgrade({ containerID: 1, containerName: "t1", contentOffset: 0, contentLength: text.length, content: text });
     const ok = await bridge.textContainerUpgrade(payload);
     matrixSet("textContainerUpgrade.ok", !!ok);
-    matrixSet("textContainerUpgrade.lastLen", text.length);
   } catch (e) {
     matrixSet("textContainerUpgrade.ok", false);
     matrixSet("textContainerUpgrade.error", String(e));
@@ -519,7 +369,7 @@ async function probeRebuild() {
     const { RebuildPageContainer } = state.SDK;
     const payload = new RebuildPageContainer({
       containerTotalNum: 1,
-      textObject: [{ xPosition: 0, yPosition: 0, width: 480, height: 80, containerID: 1, containerName: "t1", content: `Rebuild @ ${now()}` }],
+      textObject: [{ xPosition: 0, yPosition: 0, width: 480, height: 80, containerID: 1, containerName: "t1", content: `Rebuild @ ${nowForLog()}` }],
     });
     const ok = await bridge.rebuildPageContainer(payload);
     matrixSet("rebuildPageContainer.ok", !!ok);
@@ -544,7 +394,7 @@ async function probeSetLocalStorage() {
   const bridge = await ensureBridge();
   try {
     const key = "starterKit.lastSet";
-    const val = now();
+    const val = nowForLog();
     const ok = await bridge.setLocalStorage(key, val);
     matrixSet("setLocalStorage.ok", !!ok);
     matrixSet("setLocalStorage.last", { key, val });
@@ -587,8 +437,12 @@ function filterAdvancedButtons() {
   }
 }
 
-ui.btnBoot.addEventListener("click", boot);
-ui.btnHelloWorld.addEventListener("click", runHelloWorldDemo);
+ui.btnRunNextTest.addEventListener("click", runNextTest);
+ui.btnExportRun.addEventListener("click", exportRunFile);
+document.querySelectorAll(".result-btn").forEach((btn) => {
+  btn.addEventListener("click", () => saveRun(btn.dataset.result));
+});
+
 ui.btnGetUser.addEventListener("click", probeGetUserInfo);
 ui.btnGetDevice.addEventListener("click", probeGetDeviceInfo);
 ui.btnCreateStartup.addEventListener("click", probeCreateStartup);
@@ -599,15 +453,9 @@ ui.btnSetLS.addEventListener("click", probeSetLocalStorage);
 ui.btnGetLS.addEventListener("click", probeGetLocalStorage);
 ui.btnStartMic.addEventListener("click", () => probeAudio(true));
 ui.btnStopMic.addEventListener("click", () => probeAudio(false));
-ui.btnGenerateQr.addEventListener("click", generateQrForGlassesTest);
-ui.btnJournalConfirm.addEventListener("click", recordJournalEntry);
-ui.btnJournalReset.addEventListener("click", resetJournal);
-ui.btnCopySummary.addEventListener("click", () => copyToClipboard("Copy Summary", buildMarkdownSummary()));
-ui.btnCopyFullReport.addEventListener("click", () => copyToClipboard("Copy Full Report", buildMarkdownFullReport()));
-ui.btnDownloadReport.addEventListener("click", downloadReportMarkdown);
 ui.advancedSearch.addEventListener("input", filterAdvancedButtons);
 
-resetTestingSteps();
-loadJournal();
-generateQrForGlassesTest();
-boot();
+renderNextTest();
+loadRuns();
+setRunState("not started");
+log("Ready. Click 'Run Next Test' to start guided flow.");

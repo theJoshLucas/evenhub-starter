@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "documents": [
+    "testing/known-working.md",
+    "testing/needs-testing.md",
+    "testing/next-test.md"
+  ],
+  "runsDir": "testing/runs"
+}

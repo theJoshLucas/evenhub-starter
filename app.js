@@ -33,16 +33,7 @@ const TESTS = [
     id: "hello-world-startup",
     title: "Hello World startup page appears on glasses",
     goal: "Verify startup page creation can be triggered from this page.",
-    lookFor: [
-      "EXPECTED OUTPUT ON GLASSES:",
-      "",
-      "HELLO WORLD",
-      "",
-      "TIMESTAMP FORMAT: YYYY-MM-DD HH:MM:SS",
-      "",
-      "SCREEN SHOULD STAY RESPONSIVE (NO FREEZE)",
-      "RESULT SHOULD APPEAR WITHIN 3-5 SECONDS",
-    ],
+    buildExpectedText: () => `Hello world @ ${isoNow()}`,
   },
 ];
 
@@ -52,6 +43,7 @@ const state = {
   currentTestNumber: getCurrentCounter(),
   currentTest: null,
   activeRun: null,
+  expectedText: "",
 };
 
 function isoNow() {
@@ -211,7 +203,7 @@ async function ensureBridge() {
   return state.bridge;
 }
 
-async function probeCreateStartup() {
+async function probeCreateStartup(expectedText) {
   const bridge = await ensureBridge();
   const { CreateStartUpPageContainer } = state.SDK;
   const payload = new CreateStartUpPageContainer({
@@ -223,7 +215,7 @@ async function probeCreateStartup() {
       height: 80,
       containerID: 1,
       containerName: "t1",
-      content: `Hello world @ ${isoNow()}`,
+      content: expectedText,
     }],
   });
   const result = await bridge.createStartUpPageContainer(payload);
@@ -238,12 +230,12 @@ async function runTestFlow() {
 
   let startupCreated = false;
   try {
-    startupCreated = await probeCreateStartup();
+    startupCreated = await probeCreateStartup(state.expectedText);
     ui.runStatus.textContent = startupCreated
       ? "Automation finished. Now confirm what you saw on the glasses."
       : "Automation ran, but startup creation returned an error. Please continue with your observation.";
-  } catch (e) {
-    ui.runStatus.textContent = `Automation warning: ${String(e)}`;
+  } catch (error) {
+    ui.runStatus.textContent = `Automation warning: ${String(error)}`;
     ui.runStatus.className = "status err";
   } finally {
     ui.btnRunTest.disabled = false;
@@ -253,7 +245,7 @@ async function runTestFlow() {
     testId: test.id,
     testTitle: test.title,
     goal: test.goal,
-    lookFor: test.lookFor,
+    lookFor: [state.expectedText],
     runAt: isoNow(),
     startupCreated,
     answer: "",
@@ -333,9 +325,11 @@ function resetPage1(advanceCounter) {
   if (advanceCounter) bumpCounter();
   state.currentTest = getActiveTest();
 
+  state.expectedText = state.currentTest.buildExpectedText();
+
   ui.testTitle.textContent = `Test #${state.currentTestNumber}: ${state.currentTest.title}`;
   ui.testGoal.textContent = state.currentTest.goal;
-  ui.lookForViewer.textContent = state.currentTest.lookFor.join("\n");
+  ui.lookForViewer.textContent = `\n\n${state.expectedText}\n\n`;
 
   ui.runStatus.textContent = "";
   ui.runStatus.className = "status";

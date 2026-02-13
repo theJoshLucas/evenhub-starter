@@ -41,6 +41,9 @@
     h1 { font-size: 1.45rem; }
     h2 { font-size: 1.08rem; }
     .muted { color: var(--muted); }
+    .lookfor-block h2 {
+      margin-bottom: 12px;
+    }
     .code-viewer {
       background: #050806;
       color: #63ff86;
@@ -53,6 +56,12 @@
       box-shadow: inset 0 0 0 1px rgba(99, 255, 134, 0.05);
     }
     .btn-row { display: flex; flex-wrap: wrap; gap: 10px; }
+    .lookfor-block {
+      margin-top: 6px;
+    }
+    .lookfor-block .code-viewer {
+      margin-top: 12px;
+    }
     button {
       border: 1px solid var(--line);
       background: #fff;
@@ -67,6 +76,18 @@
       background: linear-gradient(180deg, #fff 0%, var(--accent-soft) 100%);
       color: #1140a3;
       font-weight: 600;
+    }
+    .run-test {
+      background: #1677ea;
+      border: 1px solid #1677ea;
+      color: #fff;
+      font-weight: 600;
+      box-shadow: none;
+      padding: 10px 28px;
+    }
+    .run-test:hover {
+      background: #126ad1;
+      border-color: #126ad1;
     }
     .yes { border-color: #b7ebcc; color: #0f7a46; }
     .no { border-color: #f3c3be; color: #a0251b; }
@@ -99,12 +120,12 @@
     <section id="page1" class="page">
       <h1 id="testTitle">Test #1: Loading…</h1>
       <p><strong>Goal:</strong> <span id="testGoal"></span></p>
-      <div>
+      <div class="lookfor-block">
         <h2>What to look for on the glasses:</h2>
         <div id="lookForViewer" class="code-viewer"></div>
       </div>
       <div class="btn-row">
-        <button id="btnRunTest" class="primary">Run Test</button>
+        <button id="btnRunTest" class="run-test">Run Test</button>
       </div>
       <p id="runStatus" class="status"></p>
     </section>

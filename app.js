@@ -30,8 +30,8 @@ const state = {
   // Keep track of container details so rebuild/text upgrade have something to target
   container: {
     containerTotalNum: 1,
-    containerID: 101,
-    containerName: "starter_text_101",
+    containerID: 1,
+    containerName: "t1",
   },
   // Capabilities matrix you’re building (in-memory)
   matrix: {},

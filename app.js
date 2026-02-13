@@ -31,10 +31,46 @@ const TEST_COUNTER_KEY = "starterKit.testCounter.v1";
 
 const TESTS = [
   {
+    id: "bridge-availability-check",
+    title: "Bridge availability check",
+    goal: "Confirm the app can connect to the Even bridge and stays responsive.",
+    buildExpectedText: () => `Bridge check @ ${isoNow()}`,
+  },
+  {
     id: "hello-world-startup",
-    title: "Hello World startup page appears on glasses",
-    goal: "Verify startup page creation can be triggered from this page.",
+    title: "Startup text render",
+    goal: "Confirm a basic startup message appears on the glasses.",
     buildExpectedText: () => `Hello world @ ${isoNow()}`,
+  },
+  {
+    id: "startup-offset-size",
+    title: "Startup render with changed position/size",
+    goal: "Confirm text still renders when moved and resized.",
+    buildExpectedText: () => `Offset text @ ${isoNow()}`,
+  },
+  {
+    id: "startup-multi-container",
+    title: "Multi-container startup page",
+    goal: "Confirm two separate text blocks appear together on startup.",
+    buildExpectedText: () => `Block A @ ${isoNow()}`,
+  },
+  {
+    id: "rerun-update-stability",
+    title: "Re-run update stability",
+    goal: "Confirm running startup updates twice in a row does not freeze.",
+    buildExpectedText: () => `Stability run @ ${isoNow()}`,
+  },
+  {
+    id: "intentional-bad-payload",
+    title: "Error-handling test",
+    goal: "Confirm an intentional bad request shows a graceful warning (not a crash).",
+    buildExpectedText: () => `Bad payload check @ ${isoNow()}`,
+  },
+  {
+    id: "persistence-loop-sanity",
+    title: "Persistence/loop sanity",
+    goal: "Confirm the next-test counter advances through the sequence predictably.",
+    buildExpectedText: () => `Sequence check #${getCurrentCounter()} @ ${isoNow()}`,
   },
 ];
 
@@ -205,9 +241,7 @@ async function ensureBridge() {
 }
 
 async function probeCreateStartup(expectedText) {
-  const bridge = await ensureBridge();
-  const { CreateStartUpPageContainer } = state.SDK;
-  const payload = new CreateStartUpPageContainer({
+  const payload = {
     containerTotalNum: 1,
     textObject: [{
       xPosition: 0,
@@ -218,9 +252,157 @@ async function probeCreateStartup(expectedText) {
       containerName: "t1",
       content: expectedText,
     }],
-  });
+  };
+  return probeCreateStartupWithPayload(payload);
+}
+
+async function probeCreateStartupWithPayload(payloadConfig) {
+  const bridge = await ensureBridge();
+  const { CreateStartUpPageContainer } = state.SDK;
+  const payload = new CreateStartUpPageContainer(payloadConfig);
   const result = await bridge.createStartUpPageContainer(payload);
   return result === 0 || result === "0";
+}
+
+async function runTestById(test, expectedText) {
+  switch (test.id) {
+    case "bridge-availability-check": {
+      await ensureBridge();
+      return {
+        startupCreated: true,
+        lookFor: ["Status says bridge connection succeeded and no freeze occurs."],
+        statusMessage: "Bridge connected successfully. App stayed responsive.",
+      };
+    }
+    case "hello-world-startup": {
+      const startupCreated = await probeCreateStartup(expectedText);
+      return {
+        startupCreated,
+        lookFor: [expectedText],
+        statusMessage: startupCreated
+          ? "Startup text sent successfully. Confirm it appears on the glasses."
+          : "Startup call returned an error code. Continue with your observation.",
+      };
+    }
+    case "startup-offset-size": {
+      const startupCreated = await probeCreateStartupWithPayload({
+        containerTotalNum: 1,
+        textObject: [{
+          xPosition: 40,
+          yPosition: 120,
+          width: 360,
+          height: 120,
+          containerID: 1,
+          containerName: "offset-box",
+          content: expectedText,
+        }],
+      });
+      return {
+        startupCreated,
+        lookFor: [expectedText],
+        statusMessage: startupCreated
+          ? "Offset/size startup text sent. Confirm its position looks different."
+          : "Offset/size test returned an error code. Continue with your observation.",
+      };
+    }
+    case "startup-multi-container": {
+      const secondLine = `Block B @ ${isoNow()}`;
+      const startupCreated = await probeCreateStartupWithPayload({
+        containerTotalNum: 2,
+        textObject: [
+          {
+            xPosition: 0,
+            yPosition: 0,
+            width: 480,
+            height: 80,
+            containerID: 1,
+            containerName: "multi-a",
+            content: expectedText,
+          },
+          {
+            xPosition: 0,
+            yPosition: 90,
+            width: 480,
+            height: 80,
+            containerID: 2,
+            containerName: "multi-b",
+            content: secondLine,
+          },
+        ],
+      });
+      return {
+        startupCreated,
+        lookFor: [expectedText, secondLine],
+        statusMessage: startupCreated
+          ? "Two startup blocks sent. Confirm both are visible."
+          : "Multi-container test returned an error code. Continue with your observation.",
+      };
+    }
+    case "rerun-update-stability": {
+      const firstPass = `${expectedText} (1/2)`;
+      const secondPass = `${expectedText} (2/2)`;
+      const runOne = await probeCreateStartup(firstPass);
+      const runTwo = await probeCreateStartup(secondPass);
+      const startupCreated = runOne && runTwo;
+      return {
+        startupCreated,
+        lookFor: [secondPass],
+        statusMessage: startupCreated
+          ? "Sent two updates in sequence without freezing. Confirm latest text appears."
+          : "At least one update returned an error code. Continue with your observation.",
+      };
+    }
+    case "intentional-bad-payload": {
+      try {
+        const startupCreated = await probeCreateStartupWithPayload({
+          containerTotalNum: 2,
+          textObject: [{
+            xPosition: 0,
+            yPosition: 0,
+            width: 480,
+            height: 80,
+            containerID: 1,
+            containerName: "bad-case",
+            content: expectedText,
+          }],
+        });
+
+        if (startupCreated) {
+          return {
+            startupCreated: false,
+            lookFor: ["App stays responsive even if this test behaves unexpectedly."],
+            statusMessage: "Bad payload unexpectedly succeeded. App still stayed responsive.",
+          };
+        }
+
+        return {
+          startupCreated: false,
+          lookFor: ["A warning is shown in app, and there is no crash/freeze."],
+          statusMessage: "Bad payload returned an error code as expected. App handled it gracefully.",
+        };
+      } catch (error) {
+        return {
+          startupCreated: false,
+          lookFor: ["A warning is shown in app, and there is no crash/freeze."],
+          statusMessage: `Expected error handled gracefully: ${String(error)}`,
+        };
+      }
+    }
+    case "persistence-loop-sanity": {
+      const sequencePosition = ((state.currentTestNumber - 1) % TESTS.length) + 1;
+      const sequenceText = `${expectedText} (step ${sequencePosition}/${TESTS.length})`;
+      const startupCreated = await probeCreateStartup(sequenceText);
+      return {
+        startupCreated,
+        lookFor: [sequenceText],
+        statusMessage: startupCreated
+          ? `Sequence check sent for step ${sequencePosition}/${TESTS.length}.`
+          : "Sequence check returned an error code. Continue with your observation.",
+      };
+    }
+    default:
+      throw new Error(`Unknown test id: ${test.id}`);
+  }
 }
 
 async function runTestFlow() {
@@ -231,11 +413,13 @@ async function runTestFlow() {
   ui.btnRunTest.disabled = true;
 
   let startupCreated = false;
+  let lookFor = [state.expectedText];
   try {
-    startupCreated = await probeCreateStartup(state.expectedText);
-    ui.runStatus.textContent = startupCreated
-      ? "Automation finished. Now confirm what you saw on the glasses."
-      : "Automation ran, but startup creation returned an error. Please continue with your observation.";
+    const result = await runTestById(test, state.expectedText);
+    startupCreated = result.startupCreated;
+    lookFor = result.lookFor;
+    ui.lookForViewerPage2.textContent = `\n\n${lookFor.join("\n")}\n\n`;
+    ui.runStatus.textContent = result.statusMessage;
   } catch (error) {
     ui.runStatus.textContent = `Automation warning: ${String(error)}`;
     ui.runStatus.className = "status err";
@@ -247,7 +431,7 @@ async function runTestFlow() {
     testId: test.id,
     testTitle: test.title,
     goal: test.goal,
-    lookFor: [state.expectedText],
+    lookFor,
     runAt: isoNow(),
     startupCreated,
     answer: "",

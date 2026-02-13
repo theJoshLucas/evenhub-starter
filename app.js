@@ -239,8 +239,6 @@ function buildMarkdownTestReport() {
     logBlock,
     "```",
     "",
-    "---",
-    "Paste this report directly into Codex or a GitHub issue.",
   ].join("\n");
 }
 

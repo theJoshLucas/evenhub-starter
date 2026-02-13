@@ -9,11 +9,10 @@
       color-scheme: light dark;
       --bg: Canvas;
       --fg: CanvasText;
-      --card: color-mix(in srgb, CanvasText 8%, Canvas 92%);
-      --border: color-mix(in srgb, CanvasText 16%, Canvas 84%);
+      --border: color-mix(in srgb, CanvasText 12%, Canvas 88%);
       --ok: #0a7;
       --bad: #c21;
-      --muted: color-mix(in srgb, CanvasText 65%, Canvas 35%);
+      --muted: color-mix(in srgb, CanvasText 62%, Canvas 38%);
       --accent: #376dff;
     }
     * { box-sizing: border-box; }
@@ -27,67 +26,71 @@
     .app {
       max-width: 780px;
       margin: 0 auto;
-      padding: 14px;
+      padding: 20px 14px 24px;
       display: grid;
-      gap: 12px;
+      gap: 20px;
     }
     h1, h2, h3, p { margin: 0; }
-    h1 { font-size: 1.45rem; letter-spacing: 0.01em; }
-    h2 { font-size: 1.05rem; margin-bottom: 8px; }
-    h3 { font-size: 0.95rem; margin-bottom: 6px; }
+    h1 { font-size: 1.4rem; letter-spacing: 0.01em; }
+    h2 { font-size: 1rem; margin-bottom: 6px; letter-spacing: 0.01em; }
+    h3 { font-size: 0.9rem; margin-bottom: 4px; font-weight: 600; }
     .muted { color: var(--muted); }
     .tiny { font-size: 0.8rem; }
     .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 12px;
+      border: 0;
+      padding: 0;
       display: grid;
-      gap: 10px;
+      gap: 8px;
     }
     .header-card { gap: 6px; }
     .pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
     .pill {
       display: inline-block;
-      border: 1px solid var(--border);
+      border: 1px solid color-mix(in srgb, var(--border) 85%, Canvas 15%);
       border-radius: 999px;
       padding: 4px 9px;
       font-size: 0.75rem;
-      background: color-mix(in srgb, var(--card) 80%, Canvas 20%);
+      background: transparent;
     }
+    .section-rule {
+      border-top: 1px solid color-mix(in srgb, var(--border) 72%, Canvas 28%);
+      padding-top: 12px;
+    }
+
     .row { display: flex; flex-wrap: wrap; gap: 8px; }
     button {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      min-height: 38px;
-      padding: 8px 11px;
+      border: 1px solid color-mix(in srgb, var(--border) 90%, Canvas 10%);
+      border-radius: 999px;
+      min-height: 36px;
+      padding: 7px 12px;
       font: inherit;
-      font-size: 0.88rem;
-      font-weight: 600;
-      background: color-mix(in srgb, var(--card) 84%, Canvas 16%);
+      font-size: 0.82rem;
+      font-weight: 500;
+      background: transparent;
       color: inherit;
+      opacity: 0.86;
       cursor: pointer;
       text-align: center;
     }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
     .primary-btn {
-      background: color-mix(in srgb, var(--accent) 18%, var(--card) 82%);
-      border-color: color-mix(in srgb, var(--accent) 35%, var(--border) 65%);
+      background: transparent;
+      border-color: color-mix(in srgb, var(--border) 78%, var(--accent) 22%);
     }
+
     .step-list {
       list-style: none;
       margin: 0;
       padding: 0;
       display: grid;
-      gap: 8px;
+      gap: 10px;
     }
     .step-item {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px;
+      border-left: 2px solid color-mix(in srgb, var(--border) 75%, Canvas 25%);
+      padding: 6px 0 6px 10px;
       display: grid;
-      gap: 4px;
-      background: color-mix(in srgb, var(--card) 80%, Canvas 20%);
+      gap: 5px;
+      transition: opacity 180ms ease, padding 180ms ease;
     }
     .step-head {
       display: flex;
@@ -100,50 +103,126 @@
       border-radius: 999px;
       border: 1px solid var(--border);
       padding: 2px 8px;
-      font-weight: 700;
+      font-weight: 600;
       text-transform: lowercase;
     }
-    .step-status.not-run { color: #666; }
-    .step-status.running { color: #a85f00; }
-    .step-status.success { color: var(--ok); }
+    .step-status.not-run { color: var(--muted); }
+    .step-status.running { color: #8a6100; }
+    .step-status.success {
+      color: color-mix(in srgb, var(--ok) 72%, CanvasText 28%);
+      border-color: color-mix(in srgb, var(--ok) 24%, var(--border) 76%);
+      opacity: 0.8;
+    }
     .step-status.failed { color: var(--bad); }
-    .grid { display: grid; gap: 12px; }
+
+    /* rule 1: completed steps shrink and quiet down */
+    .step-item:has(.step-status.success) {
+      padding-top: 4px;
+      padding-bottom: 4px;
+      opacity: 0.76;
+    }
+    .step-item:has(.step-status.success) .tiny.muted {
+      font-weight: 400;
+      color: color-mix(in srgb, var(--muted) 84%, Canvas 16%);
+    }
+
+    /* rule 7: only current step action gets emphasis */
+    .step-item .primary-btn { opacity: 0.74; }
+    .step-list:not(:has(#stepStatusQr.success)) li:nth-child(1) .primary-btn,
+    .step-list:has(#stepStatusQr.success):not(:has(#stepStatusBoot.success)) li:nth-child(2) .primary-btn,
+    .step-list:has(#stepStatusBoot.success):not(:has(#stepStatusHello.success)) li:nth-child(3) .primary-btn {
+      opacity: 1;
+      background: color-mix(in srgb, var(--accent) 8%, Canvas 92%);
+      border-color: color-mix(in srgb, var(--accent) 28%, var(--border) 72%);
+    }
+    .app:has(#stepStatusHello.success):not(:has(#stepStatusJournal.success)) #btnJournalConfirm {
+      opacity: 1;
+      background: color-mix(in srgb, var(--accent) 8%, Canvas 92%);
+      border-color: color-mix(in srgb, var(--accent) 28%, var(--border) 72%);
+    }
+
+    /* rule 2: QR demotion after success */
+    .step-item:has(#stepStatusQr.success) #qrCode,
+    .step-item:has(#stepStatusQr.success) #qrUrl,
+    .step-item:has(#stepStatusQr.success) #qrTimestamp {
+      opacity: 0.76;
+    }
+    .step-item:has(#stepStatusQr.success) #qrCode img,
+    .step-item:has(#stepStatusQr.success) #qrCode canvas {
+      max-width: 180px;
+      border-color: color-mix(in srgb, var(--border) 70%, Canvas 30%);
+      padding: 4px;
+    }
+
     .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .status-cell {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 8px;
+      border-left: 2px solid color-mix(in srgb, var(--border) 78%, Canvas 22%);
+      padding: 4px 0 4px 10px;
       font-size: 0.8rem;
-      background: color-mix(in srgb, var(--card) 80%, Canvas 20%);
     }
     .ok { color: var(--ok); font-weight: 700; }
-    .bad { color: var(--bad); font-weight: 700; }
-    textarea, input[type="search"] {
+    /* rule 3: pending defaults should be neutral, not red */
+    .status-cell .bad {
+      color: color-mix(in srgb, var(--muted) 86%, Canvas 14%);
+      font-weight: 600;
+    }
+
+    textarea, input[type="search"], select {
       width: 100%;
-      border: 1px solid var(--border);
+      border: 1px solid color-mix(in srgb, var(--border) 80%, Canvas 20%);
       border-radius: 10px;
       padding: 9px;
-      background: color-mix(in srgb, var(--card) 82%, Canvas 18%);
+      background: transparent;
       color: inherit;
       font: inherit;
       font-size: 0.86rem;
     }
+
     details summary {
       cursor: pointer;
-      font-weight: 700;
-      margin-bottom: 8px;
+      font-weight: 600;
+      list-style: none;
+      color: color-mix(in srgb, CanvasText 90%, Canvas 10%);
     }
+    details summary::-webkit-details-marker { display: none; }
+    details summary::after {
+      content: "▾";
+      float: right;
+      color: var(--muted);
+    }
+    details:not([open]) summary::after { content: "▸"; }
+
+    /* rule 4: collapsed sections fully disappear except disclosure row */
+    .collapse-panel {
+      border-top: 1px solid color-mix(in srgb, var(--border) 75%, Canvas 25%);
+      padding-top: 8px;
+    }
+    .collapse-panel:not([open]) {
+      border-top: 0;
+      padding-top: 0;
+    }
+    .collapse-panel:not([open]) > :not(summary) {
+      display: none;
+    }
+    .collapse-panel[open] > summary { margin-bottom: 8px; }
+
     .probe-group { margin-top: 6px; }
     .probe-group .row { margin-top: 6px; }
-    .journal-summary {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 9px;
-      display: grid;
-      gap: 6px;
-      font-size: 0.8rem;
-      background: color-mix(in srgb, var(--card) 80%, Canvas 20%);
+
+    /* rule 5: journal as memory */
+    .journal-shell { display: grid; gap: 10px; }
+    .journal-memory {
+      border-left: 2px solid color-mix(in srgb, var(--border) 78%, Canvas 22%);
+      padding-left: 10px;
+      opacity: 0.9;
     }
+    .journal-summary {
+      display: grid;
+      gap: 5px;
+      font-size: 0.8rem;
+    }
+    .journal-form { display: grid; gap: 6px; }
+    .journal-form .primary-btn { opacity: 0.82; }
     .journal-list {
       list-style: none;
       margin: 0;
@@ -154,19 +233,19 @@
       overflow: auto;
     }
     .journal-item {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 8px;
+      border-left: 2px solid color-mix(in srgb, var(--border) 75%, Canvas 25%);
+      padding: 5px 0 5px 10px;
       font-size: 0.84rem;
-      background: color-mix(in srgb, var(--card) 79%, Canvas 21%);
+      opacity: 0.88;
     }
     .journal-meta { font-size: 0.76rem; color: var(--muted); margin-bottom: 5px; }
+
     pre {
       margin: 0;
-      border: 1px solid var(--border);
+      border: 1px solid color-mix(in srgb, var(--border) 74%, Canvas 26%);
       border-radius: 10px;
       padding: 9px;
-      background: color-mix(in srgb, var(--card) 82%, Canvas 18%);
+      background: transparent;
       white-space: pre-wrap;
       word-break: break-word;
       max-height: 260px;
@@ -176,14 +255,14 @@
     #qrCode img, #qrCode canvas {
       width: 100%;
       max-width: 220px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
+      border-radius: 8px;
+      border: 1px solid color-mix(in srgb, var(--border) 80%, Canvas 20%);
       padding: 8px;
       background: #fff;
     }
+
     @media (min-width: 760px) {
       .app { padding: 18px; }
-      .grid.two { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
@@ -199,7 +278,7 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card section-rule">
       <h2>Recommended Test Loop</h2>
       <p class="tiny muted">Default path: follow each numbered step and watch status updates.</p>
       <ol class="step-list">
@@ -228,8 +307,8 @@
       </ol>
     </section>
 
-    <section class="card">
-      <h2>Live Status</h2>
+    <section class="card section-rule">
+      <p class="tiny muted">Live status snapshot</p>
       <div class="status-grid">
         <div class="status-cell">SDK: <span id="sdkStatus" class="bad">not loaded</span></div>
         <div class="status-cell">flutter_inappwebview: <span id="fiawvStatus" class="bad">unknown</span></div>
@@ -238,8 +317,44 @@
       </div>
     </section>
 
-    <section class="card">
-      <details id="advancedPanel">
+    <section class="card section-rule">
+      <h2>Memory</h2>
+      <p class="tiny muted">Entries are saved in this browser using localStorage.</p>
+      <div class="journal-shell">
+        <div class="journal-memory">
+          <p class="tiny muted">Run memory</p>
+          <div class="journal-summary" id="journalSummary">Loading summary…</div>
+        </div>
+
+        <div class="journal-form">
+          <label for="journalOutcome" class="tiny"><strong>Outcome</strong></label>
+          <select id="journalOutcome">
+            <option value="success">Success / win</option>
+            <option value="failure">Failure / blocker</option>
+          </select>
+
+          <label class="tiny" for="journalNotes"><strong>Notes</strong></label>
+          <textarea id="journalNotes" placeholder="What happened on the real device? Include anything that helps your next test run."></textarea>
+
+          <div class="row">
+            <button id="btnJournalConfirm" class="primary-btn">Record confirmation</button>
+            <button id="btnJournalReset">Reset journal</button>
+          </div>
+          <div class="row">
+            <button id="btnCopySummary">Copy Summary</button>
+            <button id="btnCopyFullReport">Copy Full Report</button>
+            <button id="btnDownloadReport">Download Report (.md)</button>
+          </div>
+        </div>
+
+        <p id="journalEmpty" class="tiny muted">No history yet.</p>
+        <ol id="journalList" class="journal-list"></ol>
+      </div>
+    </section>
+
+    <section class="card section-rule">
+      <h2>Diagnostics</h2>
+      <details id="advancedPanel" class="collapse-panel">
         <summary>Advanced probes (optional)</summary>
         <p class="tiny muted">Collapsed by default so the main flow stays focused.</p>
         <input id="advancedSearch" type="search" placeholder="Search advanced probes (example: audio)" />
@@ -278,47 +393,16 @@
           </div>
         </div>
       </details>
-    </section>
 
-    <section class="grid two">
-      <div class="card">
-        <h2>Capabilities Matrix (auto-filled)</h2>
+      <details id="capabilitiesPanel" class="collapse-panel">
+        <summary>Capabilities matrix</summary>
         <pre id="matrix">(nothing yet)</pre>
-      </div>
+      </details>
 
-      <div class="card">
-        <h2>Developer Journal</h2>
-        <p class="tiny muted">Entries are saved in this browser using localStorage.</p>
-
-        <div class="journal-summary" id="journalSummary">Loading summary…</div>
-
-        <label for="journalOutcome" class="tiny"><strong>Outcome</strong></label>
-        <select id="journalOutcome">
-          <option value="success">Success / win</option>
-          <option value="failure">Failure / blocker</option>
-        </select>
-
-        <label class="tiny" for="journalNotes"><strong>Notes</strong></label>
-        <textarea id="journalNotes" placeholder="What happened on the real device? Include anything that helps your next test run."></textarea>
-
-        <div class="row">
-          <button id="btnJournalConfirm" class="primary-btn">Record confirmation</button>
-          <button id="btnJournalReset">Reset journal</button>
-        </div>
-        <div class="row">
-          <button id="btnCopySummary">Copy Summary</button>
-          <button id="btnCopyFullReport">Copy Full Report</button>
-          <button id="btnDownloadReport">Download Report (.md)</button>
-        </div>
-
-        <p id="journalEmpty" class="tiny muted">No history yet.</p>
-        <ol id="journalList" class="journal-list"></ol>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Log</h2>
-      <pre id="log"></pre>
+      <details id="logPanel" class="collapse-panel">
+        <summary>Log</summary>
+        <pre id="log"></pre>
+      </details>
     </section>
   </main>
 

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Even Hub Starter Kit</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 16px; max-width: 980px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #8884; background: #8882; cursor: pointer; }
+    button:hover { background: #8883; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .pill { display:inline-block; padding: 4px 8px; border-radius: 999px; border:1px solid #8884; background:#8882; font-size: 12px; }
+    .ok { color: #0a7; font-weight: 700; }
+    .bad { color: #c21; font-weight: 700; }
+    code, pre { background: #8882; border: 1px solid #8883; border-radius: 10px; padding: 10px; }
+    pre { overflow:auto; }
+    .grid { display:grid; grid-template-columns: 1fr; gap: 12px; }
+    @media (min-width: 980px) { .grid { grid-template-columns: 1fr 1fr; } }
+    .card { border: 1px solid #8883; border-radius: 14px; padding: 12px; }
+    .muted { opacity: 0.75; }
+    .tiny { font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Even Hub Starter Kit</h1>
+  <div class="row">
+    <span class="pill">Purpose: probe + docs + reusable template</span>
+    <span class="pill">Works best via GitHub Pages / HTTPS</span>
+    <span class="pill">Build: no bundler</span>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Status</h2>
+      <p class="muted">Bridge/SDK connectivity + last action.</p>
+      <p>
+        SDK: <span id="sdkStatus" class="bad">not loaded</span><br/>
+        flutter_inappwebview: <span id="fiawvStatus" class="bad">unknown</span><br/>
+        Bridge ready: <span id="bridgeStatus" class="bad">unknown</span><br/>
+        Startup page: <span id="startupStatus" class="bad">not created</span>
+      </p>
+
+      <div class="row">
+        <button id="btnBoot">Boot / Reconnect</button>
+        <button id="btnGetUser">getUserInfo()</button>
+        <button id="btnGetDevice">getDeviceInfo()</button>
+      </div>
+
+      <div class="row">
+        <button id="btnCreateStartup">createStartUpPageContainer()</button>
+        <button id="btnTextUpgrade">textContainerUpgrade()</button>
+        <button id="btnRebuild">rebuildPageContainer()</button>
+        <button id="btnShutdown">shutDownPageContainer()</button>
+      </div>
+
+      <div class="row">
+        <button id="btnSetLS">setLocalStorage()</button>
+        <button id="btnGetLS">getLocalStorage()</button>
+        <button id="btnStartMic">audioControl(true)</button>
+        <button id="btnStopMic">audioControl(false)</button>
+      </div>
+
+      <p class="tiny muted">
+        Tip: if a button appears to do “nothing”, check the Log panel below. Even Hub sometimes fails silently unless you log.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Capabilities Matrix (auto-filled)</h2>
+      <p class="muted">This panel updates as you click probes. Copy/paste into docs later.</p>
+      <pre id="matrix">(nothing yet)</pre>
+      <p class="tiny muted">Saved in-memory only. If you want persistence, we can add “download matrix.json” or push to a gist later.</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px;">
+    <h2>Log</h2>
+    <pre id="log"></pre>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

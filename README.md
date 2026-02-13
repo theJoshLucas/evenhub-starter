@@ -6,9 +6,10 @@ Zero-build, GitHub-Pages-friendly starter kit for validating Even Hub SDK behavi
 This repo is a **developer probe harness**, not a polished user product yet.
 
 It provides:
-- Button-driven probes for common Even Hub SDK methods.
+- A mobile-first guided loop with numbered status steps.
 - Runtime status pills (SDK load, bridge readiness, startup page state).
-- In-memory capabilities matrix that captures what worked vs failed.
+- Advanced probes in a collapsed panel (Bridge, Page, Storage, Audio + search).
+- Persistent developer journal + markdown export helpers for fast iteration.
 
 ## Ground truth dependency
 ### SDK
@@ -31,8 +32,8 @@ const user = await bridge.getUserInfo();
 ```
 
 ## Repo tour
-- `index.html` — UI: status pills, probe buttons, log panel, matrix panel.
-- `app.js` — bridge boot flow, SDK loading, probe implementations, matrix updates.
+- `index.html` — mobile-first layout, guided loop, advanced section, journal/report controls.
+- `app.js` — bridge boot flow, probe logic, step statuses, persistent journal, markdown exports.
 - `CAPABILITIES.md` — template for recording method-level results.
 - `docs/BASELINE.md` — current run-state and known failures.
 - `docs/SDK_NOTES.md` — discovered API surfaces and hello-world path.
@@ -54,13 +55,13 @@ What you should see:
 3. Click **Run Hello World Demo** (recommended) or **Boot / Reconnect**.
 4. The demo will auto-try `createStartUpPageContainer()` up to 3 times with a short delay.
 
-## Glasses QR testing loop (human-in-the-loop)
-Why this exists: Even Hub WebView can cache aggressively, so scanning the same old QR may open stale code. This tool creates a fresh URL each time by appending a `cb` (cache-busting) query value.
+## Guided recommended loop (default)
+Why this exists: Even Hub WebView can cache aggressively, so scanning the same old QR may open stale code. The top section keeps a repeatable test path with status chips for each step.
 
-1. Click **Generate QR for Glasses Test**.
-2. Scan the new QR with the glasses flow.
-3. Observe behavior on-device (status, logs, and what appears in-glasses).
-4. Return to the page and click **Generate QR for Glasses Test** again for the next run.
+1. Click **Generate Fresh QR** (cache-busted URL is shown under the button).
+2. Click **Boot / Reconnect**.
+3. Click **Run Hello World Demo**.
+4. Record confirmation in **Developer Journal** with outcome + notes.
 
 Important: each generated QR is effectively single-use for testing because it is tied to one timestamped URL.
 
@@ -71,6 +72,12 @@ Important: each generated QR is effectively single-use for testing because it is
 4. Check status + matrix output (`helloWorldDemo.ok` and `createStartUpPageContainer.ok`).
 
 Note: this project provides tooling to help a human validate on real hardware; it does not itself prove device validation.
+
+
+## Reporting shortcuts
+- **Copy Summary**: short markdown for chat updates.
+- **Copy Full Report**: full markdown containing timestamp, tested URL, status matrix, logs, and journal snapshot.
+- **Download Report (.md)**: saves the full report locally for handoffs.
 
 ## Current constraints
 - Device/runtime dependency: full validation requires Even bridge (`flutter_inappwebview`).

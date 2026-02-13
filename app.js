@@ -1,6 +1,5 @@
 // Even Hub Starter Kit - no build step
-// Goal: load @evenrealities/even_hub_sdk, connect to EvenAppBridge, and run small probes.
-// This is intentionally verbose + defensive, because constrained WebViews are… spicy.
+// Human-assisted real-device testing helper (not automatic validation).
 
 const $ = (id) => document.getElementById(id);
 
@@ -30,37 +29,41 @@ const ui = {
   stepStatusQr: $("stepStatusQr"),
   stepStatusBoot: $("stepStatusBoot"),
   stepStatusHello: $("stepStatusHello"),
+  stepStatusJournal: $("stepStatusJournal"),
+  journalOutcome: $("journalOutcome"),
   journalNotes: $("journalNotes"),
   btnJournalConfirm: $("btnJournalConfirm"),
   btnJournalReset: $("btnJournalReset"),
-  btnCopyReport: $("btnCopyReport"),
+  btnCopySummary: $("btnCopySummary"),
+  btnCopyFullReport: $("btnCopyFullReport"),
+  btnDownloadReport: $("btnDownloadReport"),
   journalList: $("journalList"),
   journalEmpty: $("journalEmpty"),
+  journalSummary: $("journalSummary"),
+  advancedSearch: $("advancedSearch"),
 };
 
 const state = {
   SDK: null,
   bridge: null,
-  // Keep track of container details so rebuild/text upgrade have something to target
-  container: {
-    containerTotalNum: 1,
-    containerID: 1,
-    containerName: "t1",
-  },
-  // Capabilities matrix you’re building (in-memory)
+  container: { containerTotalNum: 1, containerID: 1, containerName: "t1" },
   matrix: {},
   journal: [],
 };
 
+const JOURNAL_STORAGE_KEY = "starterKit.developerJournal.v2";
+
 function now() {
   return new Date().toISOString().replace("T", " ").replace("Z", "");
 }
+
 function log(...args) {
-  const line = args.map(a => (typeof a === "string" ? a : JSON.stringify(a, null, 2))).join(" ");
+  const line = args.map((a) => (typeof a === "string" ? a : JSON.stringify(a, null, 2))).join(" ");
   ui.log.textContent += `[${now()}] ${line}\n`;
   ui.log.scrollTop = ui.log.scrollHeight;
   console.log(...args);
 }
+
 function setStatus(el, ok, text) {
   el.textContent = text;
   el.className = ok ? "ok" : "bad";
@@ -75,10 +78,10 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-
 function setStepStatus(el, status) {
   const map = {
     not_run: { text: "not run", className: "step-status not-run" },
+    running: { text: "running", className: "step-status running" },
     success: { text: "success", className: "step-status success" },
     failed: { text: "failed", className: "step-status failed" },
   };
@@ -91,52 +94,61 @@ function resetTestingSteps() {
   setStepStatus(ui.stepStatusQr, "not_run");
   setStepStatus(ui.stepStatusBoot, "not_run");
   setStepStatus(ui.stepStatusHello, "not_run");
+  setStepStatus(ui.stepStatusJournal, "not_run");
 }
-
-
-const JOURNAL_STORAGE_KEY = "starterKit.developerJournal";
 
 function saveJournal() {
   localStorage.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(state.journal));
 }
 
+function getCurrentOutcomeSummary() {
+  const boot = state.matrix["bridge.ready"] ? "bridge ready" : "bridge not ready";
+  const hello = state.matrix["helloWorldDemo.ok"] ? "hello world success" : "hello world not confirmed";
+  return `${boot}, ${hello}`;
+}
+
+function renderJournalSummary() {
+  const wins = state.journal.filter((entry) => entry.outcomeType === "success").length;
+  const failures = state.journal.filter((entry) => entry.outcomeType === "failure").length;
+  const lastEntry = state.journal.at(-1);
+  const lastRun = lastEntry?.timestamp ?? "(none yet)";
+  const lastUrl = state.matrix["qrTest.url"] ?? "(generate QR to capture)";
+
+  ui.journalSummary.innerHTML = [
+    `<div><strong>Wins:</strong> ${wins}</div>`,
+    `<div><strong>Failures:</strong> ${failures}</div>`,
+    `<div><strong>Last run:</strong> ${lastRun}</div>`,
+    `<div><strong>Last URL:</strong> ${lastUrl}</div>`,
+  ].join("");
+}
+
 function renderJournal() {
   ui.journalList.innerHTML = "";
-
   if (!state.journal.length) {
     ui.journalEmpty.style.display = "block";
+    renderJournalSummary();
     return;
   }
 
   ui.journalEmpty.style.display = "none";
-
   for (const item of [...state.journal].reverse()) {
     const li = document.createElement("li");
     li.className = "journal-item";
-
-    const meta = document.createElement("div");
-    meta.className = "journal-meta";
-    meta.textContent = `${item.timestamp} · ${item.outcome}`;
-
-    const note = document.createElement("div");
-    note.textContent = item.notes;
-
-    li.appendChild(meta);
-    li.appendChild(note);
+    li.innerHTML = `
+      <div class="journal-meta">${item.timestamp} · ${item.outcomeType} · ${item.outcome}</div>
+      <div>${item.notes}</div>
+      <div class="tiny muted">URL: ${item.url || "(unknown)"}</div>
+    `;
     ui.journalList.appendChild(li);
   }
+
+  renderJournalSummary();
 }
 
 function loadJournal() {
   try {
     const raw = localStorage.getItem(JOURNAL_STORAGE_KEY);
-    if (!raw) {
-      state.journal = [];
-      renderJournal();
-      return;
-    }
-
-    const parsed = JSON.parse(raw);
+    const parsed = raw ? JSON.parse(raw) : [];
     state.journal = Array.isArray(parsed) ? parsed : [];
   } catch (e) {
     log("Journal load ERROR:", String(e));
@@ -146,26 +158,25 @@ function loadJournal() {
   renderJournal();
 }
 
-function getCurrentOutcomeSummary() {
-  const boot = state.matrix["bridge.ready"] ? "bridge ready" : "bridge not ready";
-  const hello = state.matrix["helloWorldDemo.ok"] ? "hello world success" : "hello world not confirmed";
-  return `${boot}, ${hello}`;
-}
+function recordJournalEntry() {
+  setStepStatus(ui.stepStatusJournal, "running");
 
-function recordConfirmedSuccess() {
-  const noteText = ui.journalNotes.value.trim();
-  const notes = noteText || "Confirmed success (no extra notes).";
+  const notes = ui.journalNotes.value.trim() || "No extra notes.";
+  const outcomeType = ui.journalOutcome.value === "failure" ? "failure" : "success";
 
   const entry = {
     timestamp: now(),
-    notes,
+    outcomeType,
     outcome: getCurrentOutcomeSummary(),
+    notes,
+    url: state.matrix["qrTest.url"] || buildGitHubPagesUrl(),
   };
 
   state.journal.push(entry);
   saveJournal();
   renderJournal();
   ui.journalNotes.value = "";
+  setStepStatus(ui.stepStatusJournal, "success");
   log("Developer Journal entry added:", entry);
 }
 
@@ -173,6 +184,7 @@ function resetJournal() {
   state.journal = [];
   saveJournal();
   renderJournal();
+  setStepStatus(ui.stepStatusJournal, "not_run");
   log("Developer Journal reset.");
 }
 
@@ -181,77 +193,103 @@ function getStepStatusLabel(el) {
 }
 
 function getRecentLogs(limit = 40) {
-  const lines = (ui.log.textContent || "")
+  return (ui.log.textContent || "")
     .split("\n")
     .map((line) => line.trimEnd())
-    .filter(Boolean);
-  return lines.slice(-limit);
+    .filter(Boolean)
+    .slice(-limit);
 }
 
-function buildMarkdownTestReport() {
-  const generatedAt = new Date().toISOString();
-  const testedUrl = state.matrix["qrTest.url"] || buildGitHubPagesUrl();
-  const testedAt = state.matrix["qrTest.timestamp"] || "(not generated yet)";
-  const testSummary = {
-    generatedQr: getStepStatusLabel(ui.stepStatusQr),
-    bridgeConnection: getStepStatusLabel(ui.stepStatusBoot),
-    helloWorldDemo: getStepStatusLabel(ui.stepStatusHello),
-    bridgeReady: !!state.matrix["bridge.ready"],
-    startupPageCreated: !!state.matrix["createStartUpPageContainer.ok"],
-    helloWorldConfirmed: !!state.matrix["helloWorldDemo.ok"],
-    latestOutcomeSummary: getCurrentOutcomeSummary(),
+function buildReportData() {
+  return {
+    generatedAt: new Date().toISOString(),
+    testedUrl: state.matrix["qrTest.url"] || buildGitHubPagesUrl(),
+    testedAt: state.matrix["qrTest.timestamp"] || "(not generated yet)",
+    status: {
+      generatedQr: getStepStatusLabel(ui.stepStatusQr),
+      bridgeConnection: getStepStatusLabel(ui.stepStatusBoot),
+      helloWorldDemo: getStepStatusLabel(ui.stepStatusHello),
+      recordConfirmation: getStepStatusLabel(ui.stepStatusJournal),
+      bridgeReady: !!state.matrix["bridge.ready"],
+      startupPageCreated: !!state.matrix["createStartUpPageContainer.ok"],
+      helloWorldConfirmed: !!state.matrix["helloWorldDemo.ok"],
+      latestOutcomeSummary: getCurrentOutcomeSummary(),
+    },
+    matrixSnapshot: state.matrix,
+    recentLogs: getRecentLogs(),
+    journalSnapshot: state.journal,
   };
+}
 
-  const recentLogs = getRecentLogs();
-  const journalBlock = state.journal.length
-    ? JSON.stringify(state.journal, null, 2)
-    : "[]";
-  const matrixBlock = Object.keys(state.matrix).length
-    ? JSON.stringify(state.matrix, null, 2)
-    : "{}";
-  const logBlock = recentLogs.length ? recentLogs.join("\n") : "(no logs yet)";
+function buildMarkdownSummary() {
+  const data = buildReportData();
+  return [
+    "# Even Hub Test Summary",
+    `- Timestamp: ${data.generatedAt}`,
+    `- Tested URL: ${data.testedUrl}`,
+    `- Current status: ${data.status.latestOutcomeSummary}`,
+    `- Steps: QR=${data.status.generatedQr}, Boot=${data.status.bridgeConnection}, Hello=${data.status.helloWorldDemo}, Journal=${data.status.recordConfirmation}`,
+    `- Journal entries: ${data.journalSnapshot.length}`,
+    "",
+  ].join("\n");
+}
 
+function buildMarkdownFullReport() {
+  const data = buildReportData();
   return [
     "# Even Hub Test Report",
     "",
     "## Context",
-    `- Report generated: ${generatedAt}`,
-    `- URL tested: ${testedUrl}`,
-    `- URL timestamp: ${testedAt}`,
+    `- Timestamp: ${data.generatedAt}`,
+    `- Tested URL: ${data.testedUrl}`,
+    `- URL timestamp: ${data.testedAt}`,
     "",
-    "## Current Test Results",
+    "## Current Status Matrix",
     "```json",
-    JSON.stringify(testSummary, null, 2),
+    JSON.stringify(data.status, null, 2),
     "```",
     "",
     "## Capabilities Matrix Snapshot",
     "```json",
-    matrixBlock,
-    "```",
-    "",
-    "## Persistent Journal State",
-    "```json",
-    journalBlock,
+    JSON.stringify(data.matrixSnapshot, null, 2),
     "```",
     "",
     "## Recent Logs",
     "```text",
-    logBlock,
+    data.recentLogs.length ? data.recentLogs.join("\n") : "(no logs yet)",
+    "```",
+    "",
+    "## Journal Snapshot",
+    "```json",
+    JSON.stringify(data.journalSnapshot, null, 2),
     "```",
     "",
   ].join("\n");
 }
 
-async function copyTestReport() {
-  const report = buildMarkdownTestReport();
-
+async function copyToClipboard(name, content) {
   try {
-    await navigator.clipboard.writeText(report);
-    log("Copy Test Report: markdown report copied to clipboard ✅");
+    await navigator.clipboard.writeText(content);
+    log(`${name}: copied to clipboard ✅`);
   } catch (e) {
-    log("Copy Test Report clipboard write failed; opening fallback prompt:", String(e));
-    window.prompt("Copy the markdown report below:", report);
+    log(`${name}: clipboard write failed, opening fallback prompt:`, String(e));
+    window.prompt("Copy the text below:", content);
   }
+}
+
+function downloadReportMarkdown() {
+  const content = buildMarkdownFullReport();
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `evenhub-report-${stamp}.md`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  log("Download Report: markdown file created.");
 }
 
 function buildGitHubPagesUrl() {
@@ -265,13 +303,11 @@ function buildCacheBustedUrl() {
   const stamp = Date.now();
   const url = new URL(base);
   url.searchParams.set("cb", String(stamp));
-  return {
-    url: url.toString(),
-    timestamp: new Date(stamp).toISOString(),
-  };
+  return { url: url.toString(), timestamp: new Date(stamp).toISOString() };
 }
 
 function generateQrForGlassesTest() {
+  setStepStatus(ui.stepStatusQr, "running");
   try {
     const qrLib = window.QRCode;
     if (!qrLib) throw new Error("QRCode library is not loaded.");
@@ -281,16 +317,12 @@ function generateQrForGlassesTest() {
     ui.qrTimestamp.textContent = timestamp;
 
     ui.qrCode.innerHTML = "";
-    new qrLib(ui.qrCode, {
-      text: url,
-      width: 220,
-      height: 220,
-      correctLevel: qrLib.CorrectLevel.M,
-    });
+    new qrLib(ui.qrCode, { text: url, width: 220, height: 220, correctLevel: qrLib.CorrectLevel.M });
 
     matrixSet("qrTest.url", url);
     matrixSet("qrTest.timestamp", timestamp);
     setStepStatus(ui.stepStatusQr, "success");
+    renderJournalSummary();
     log("Generated glasses test QR:", { url, timestamp });
   } catch (e) {
     log("Generate QR ERROR:", String(e));
@@ -299,12 +331,7 @@ function generateQrForGlassesTest() {
   }
 }
 
-// ---- SDK loading (try a couple CDNs) ----
 async function importSdk() {
-  // Strategy:
-  // 1) esm.sh (fast + clean ESM)
-  // 2) unpkg ?module fallback
-  // If you prefer a single source, delete one.
   const candidates = [
     "https://esm.sh/@evenrealities/even_hub_sdk@0.0.7",
     "https://unpkg.com/@evenrealities/even_hub_sdk@0.0.7/dist/index.js",
@@ -315,12 +342,8 @@ async function importSdk() {
     try {
       log(`Attempting SDK import: ${url}`);
       const mod = await import(url);
-      if (mod?.EvenAppBridge) {
-        log("SDK import success.");
-        return mod;
-      }
+      if (mod?.EvenAppBridge) return mod;
       lastErr = new Error("Module loaded but missing EvenAppBridge export.");
-      log(String(lastErr));
     } catch (e) {
       lastErr = e;
       log(`SDK import failed: ${String(e)}`);
@@ -329,15 +352,14 @@ async function importSdk() {
   throw lastErr ?? new Error("SDK import failed (unknown).");
 }
 
-// ---- Bridge boot ----
 async function boot() {
   ui.btnBoot.disabled = true;
+  setStepStatus(ui.stepStatusBoot, "running");
   try {
     setStatus(ui.sdkStatus, false, "loading…");
     setStatus(ui.fiawvStatus, false, "checking…");
     setStatus(ui.bridgeStatus, false, "connecting…");
 
-    // detect flutter_inappwebview presence
     const hasFIAWV = !!(window.flutter_inappwebview && window.flutter_inappwebview.callHandler);
     setStatus(ui.fiawvStatus, hasFIAWV, hasFIAWV ? "present ✅" : "missing ❌");
     matrixSet("flutter_inappwebview.present", hasFIAWV);
@@ -346,16 +368,13 @@ async function boot() {
     setStatus(ui.sdkStatus, true, "loaded ✅");
     matrixSet("sdk.loaded", true);
 
-    const { waitForEvenAppBridge, EvenAppBridge, BridgeEvent } = state.SDK;
-
-    // Some environments don’t auto-init; getInstance() is a safe nudge.
+    const { waitForEvenAppBridge, EvenAppBridge } = state.SDK;
     try { EvenAppBridge.getInstance(); } catch (_) {}
 
     state.bridge = await waitForEvenAppBridge();
     setStatus(ui.bridgeStatus, true, "ready ✅");
     matrixSet("bridge.ready", true);
 
-    // Subscribe to device status changes
     try {
       state.bridge.onDeviceStatusChanged((status) => {
         log("deviceStatusChanged:", status);
@@ -363,12 +382,10 @@ async function boot() {
       });
       matrixSet("events.deviceStatusChanged.subscribed", true);
     } catch (e) {
-      log("Failed subscribing deviceStatusChanged:", String(e));
       matrixSet("events.deviceStatusChanged.subscribed", false);
       matrixSet("events.deviceStatusChanged.error", String(e));
     }
 
-    // Subscribe to EvenHub events
     try {
       state.bridge.onEvenHubEvent((event) => {
         log("evenHubEvent:", event);
@@ -376,7 +393,6 @@ async function boot() {
       });
       matrixSet("events.evenHubEvent.subscribed", true);
     } catch (e) {
-      log("Failed subscribing evenHubEvent:", String(e));
       matrixSet("events.evenHubEvent.subscribed", false);
       matrixSet("events.evenHubEvent.error", String(e));
     }
@@ -394,7 +410,6 @@ async function boot() {
   }
 }
 
-// ---- Probes ----
 async function ensureBridge() {
   if (!state.bridge) await boot();
   if (!state.bridge) throw new Error("Bridge not available (boot failed).");
@@ -409,7 +424,6 @@ async function probeGetUserInfo() {
     matrixSet("getUserInfo.ok", true);
     matrixSet("getUserInfo.value", user);
   } catch (e) {
-    log("getUserInfo ERROR:", String(e));
     matrixSet("getUserInfo.ok", false);
     matrixSet("getUserInfo.error", String(e));
   }
@@ -423,7 +437,6 @@ async function probeGetDeviceInfo() {
     matrixSet("getDeviceInfo.ok", true);
     matrixSet("getDeviceInfo.value", dev);
   } catch (e) {
-    log("getDeviceInfo ERROR:", String(e));
     matrixSet("getDeviceInfo.ok", false);
     matrixSet("getDeviceInfo.error", String(e));
   }
@@ -433,35 +446,16 @@ async function probeCreateStartup() {
   const bridge = await ensureBridge();
   try {
     const { CreateStartUpPageContainer } = state.SDK;
-
-    // Minimal container: one text box.
     const payload = new CreateStartUpPageContainer({
       containerTotalNum: 1,
-      textObject: [
-        {
-          xPosition: 0,
-          yPosition: 0,
-          width: 480,
-          height: 80,
-          containerID: state.container.containerID,
-          containerName: state.container.containerName,
-          content: "Hello from EvenHub Starter Kit!"
-        },
-      ],
+      textObject: [{ xPosition: 0, yPosition: 0, width: 480, height: 80, containerID: 1, containerName: "t1", content: "Hello from EvenHub Starter Kit!" }],
     });
-
-    log("Calling createStartUpPageContainer…", payload.toJson?.() ?? payload);
     const result = await bridge.createStartUpPageContainer(payload);
-    log("createStartUpPageContainer result:", result);
-
-    // SDK docs say: 0 success, 1 invalid, 2 oversize, 3 outOfMemory
-    const ok = (result === 0 || result === "success" || result?.toString?.() === "0");
+    const ok = result === 0 || result === "success" || result?.toString?.() === "0";
     setStatus(ui.startupStatus, ok, ok ? "created ✅" : `failed (${result}) ❌`);
-
     matrixSet("createStartUpPageContainer.ok", ok);
     matrixSet("createStartUpPageContainer.result", result);
   } catch (e) {
-    log("createStartUpPageContainer ERROR:", String(e));
     setStatus(ui.startupStatus, false, "failed ❌");
     matrixSet("createStartUpPageContainer.ok", false);
     matrixSet("createStartUpPageContainer.error", String(e));
@@ -470,10 +464,9 @@ async function probeCreateStartup() {
 
 async function runHelloWorldDemo() {
   ui.btnHelloWorld.disabled = true;
+  setStepStatus(ui.stepStatusHello, "running");
   try {
-    log("Hello world demo starting...");
     matrixSet("helloWorldDemo.startedAt", now());
-
     await boot();
 
     const attempts = 3;
@@ -483,33 +476,20 @@ async function runHelloWorldDemo() {
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       log(`Hello world attempt ${attempt}/${attempts}`);
       await probeCreateStartup();
-
       const createOk = state.matrix["createStartUpPageContainer.ok"];
       lastResult = state.matrix["createStartUpPageContainer.result"];
       if (createOk) {
         success = true;
         break;
       }
-
-      if (attempt < attempts) {
-        log("Startup create failed; waiting 1200ms before retry...");
-        await sleep(1200);
-      }
+      if (attempt < attempts) await sleep(1200);
     }
 
     matrixSet("helloWorldDemo.attempts", attempts);
     matrixSet("helloWorldDemo.ok", success);
     matrixSet("helloWorldDemo.lastResult", lastResult);
-
-    if (success) {
-      setStepStatus(ui.stepStatusHello, "success");
-      log("Hello world demo complete ✅");
-    } else {
-      setStepStatus(ui.stepStatusHello, "failed");
-      log("Hello world demo failed ❌ (see matrix + logs)");
-    }
+    setStepStatus(ui.stepStatusHello, success ? "success" : "failed");
   } catch (e) {
-    log("Hello world demo ERROR:", String(e));
     setStepStatus(ui.stepStatusHello, "failed");
     matrixSet("helloWorldDemo.ok", false);
     matrixSet("helloWorldDemo.error", String(e));
@@ -522,24 +502,12 @@ async function probeTextUpgrade() {
   const bridge = await ensureBridge();
   try {
     const { TextContainerUpgrade } = state.SDK;
-
     const text = `Upgraded @ ${now()}\nIf you see this on the glasses, textContainerUpgrade works.`;
-    const payload = new TextContainerUpgrade({
-      containerID: state.container.containerID,
-      containerName: state.container.containerName,
-      contentOffset: 0,
-      contentLength: text.length,
-      content: text,
-    });
-
-    log("Calling textContainerUpgrade…", payload.toJson?.() ?? payload);
+    const payload = new TextContainerUpgrade({ containerID: 1, containerName: "t1", contentOffset: 0, contentLength: text.length, content: text });
     const ok = await bridge.textContainerUpgrade(payload);
-    log("textContainerUpgrade result:", ok);
-
     matrixSet("textContainerUpgrade.ok", !!ok);
     matrixSet("textContainerUpgrade.lastLen", text.length);
   } catch (e) {
-    log("textContainerUpgrade ERROR:", String(e));
     matrixSet("textContainerUpgrade.ok", false);
     matrixSet("textContainerUpgrade.error", String(e));
   }
@@ -549,29 +517,13 @@ async function probeRebuild() {
   const bridge = await ensureBridge();
   try {
     const { RebuildPageContainer } = state.SDK;
-
     const payload = new RebuildPageContainer({
       containerTotalNum: 1,
-      textObject: [
-        {
-          xPosition: 0,
-          yPosition: 0,
-          width: 480,
-          height: 80,
-          containerID: state.container.containerID,
-          containerName: state.container.containerName,
-          content: `Rebuild @ ${now()}`,
-        },
-      ],
+      textObject: [{ xPosition: 0, yPosition: 0, width: 480, height: 80, containerID: 1, containerName: "t1", content: `Rebuild @ ${now()}` }],
     });
-
-    log("Calling rebuildPageContainer…", payload.toJson?.() ?? payload);
     const ok = await bridge.rebuildPageContainer(payload);
-    log("rebuildPageContainer result:", ok);
-
     matrixSet("rebuildPageContainer.ok", !!ok);
   } catch (e) {
-    log("rebuildPageContainer ERROR:", String(e));
     matrixSet("rebuildPageContainer.ok", false);
     matrixSet("rebuildPageContainer.error", String(e));
   }
@@ -580,12 +532,9 @@ async function probeRebuild() {
 async function probeShutdown() {
   const bridge = await ensureBridge();
   try {
-    log("Calling shutDownPageContainer(exitMode=1)…");
     const ok = await bridge.shutDownPageContainer(1);
-    log("shutDownPageContainer result:", ok);
     matrixSet("shutDownPageContainer.ok", !!ok);
   } catch (e) {
-    log("shutDownPageContainer ERROR:", String(e));
     matrixSet("shutDownPageContainer.ok", false);
     matrixSet("shutDownPageContainer.error", String(e));
   }
@@ -597,11 +546,9 @@ async function probeSetLocalStorage() {
     const key = "starterKit.lastSet";
     const val = now();
     const ok = await bridge.setLocalStorage(key, val);
-    log("setLocalStorage:", { key, val, ok });
     matrixSet("setLocalStorage.ok", !!ok);
     matrixSet("setLocalStorage.last", { key, val });
   } catch (e) {
-    log("setLocalStorage ERROR:", String(e));
     matrixSet("setLocalStorage.ok", false);
     matrixSet("setLocalStorage.error", String(e));
   }
@@ -612,11 +559,9 @@ async function probeGetLocalStorage() {
   try {
     const key = "starterKit.lastSet";
     const val = await bridge.getLocalStorage(key);
-    log("getLocalStorage:", { key, val });
     matrixSet("getLocalStorage.ok", true);
     matrixSet("getLocalStorage.last", { key, val });
   } catch (e) {
-    log("getLocalStorage ERROR:", String(e));
     matrixSet("getLocalStorage.ok", false);
     matrixSet("getLocalStorage.error", String(e));
   }
@@ -626,16 +571,22 @@ async function probeAudio(on) {
   const bridge = await ensureBridge();
   try {
     const ok = await bridge.audioControl(!!on);
-    log(`audioControl(${!!on}) result:`, ok);
     matrixSet(`audioControl.${on ? "on" : "off"}.ok`, !!ok);
   } catch (e) {
-    log("audioControl ERROR:", String(e));
     matrixSet(`audioControl.${on ? "on" : "off"}.ok`, false);
     matrixSet(`audioControl.${on ? "on" : "off"}.error`, String(e));
   }
 }
 
-// ---- Wire up UI ----
+function filterAdvancedButtons() {
+  const query = (ui.advancedSearch.value || "").toLowerCase().trim();
+  const buttons = Array.from(document.querySelectorAll("button[data-probe]"));
+  for (const btn of buttons) {
+    const text = `${btn.textContent} ${btn.dataset.probe}`.toLowerCase();
+    btn.style.display = !query || text.includes(query) ? "" : "none";
+  }
+}
+
 ui.btnBoot.addEventListener("click", boot);
 ui.btnHelloWorld.addEventListener("click", runHelloWorldDemo);
 ui.btnGetUser.addEventListener("click", probeGetUserInfo);
@@ -649,11 +600,13 @@ ui.btnGetLS.addEventListener("click", probeGetLocalStorage);
 ui.btnStartMic.addEventListener("click", () => probeAudio(true));
 ui.btnStopMic.addEventListener("click", () => probeAudio(false));
 ui.btnGenerateQr.addEventListener("click", generateQrForGlassesTest);
-ui.btnJournalConfirm.addEventListener("click", recordConfirmedSuccess);
+ui.btnJournalConfirm.addEventListener("click", recordJournalEntry);
 ui.btnJournalReset.addEventListener("click", resetJournal);
-ui.btnCopyReport.addEventListener("click", copyTestReport);
+ui.btnCopySummary.addEventListener("click", () => copyToClipboard("Copy Summary", buildMarkdownSummary()));
+ui.btnCopyFullReport.addEventListener("click", () => copyToClipboard("Copy Full Report", buildMarkdownFullReport()));
+ui.btnDownloadReport.addEventListener("click", downloadReportMarkdown);
+ui.advancedSearch.addEventListener("input", filterAdvancedButtons);
 
-// Initialize testing step indicators and auto-prepare first run
 resetTestingSteps();
 loadJournal();
 generateQrForGlassesTest();

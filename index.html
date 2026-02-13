@@ -5,220 +5,321 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>Even Hub Starter Kit</title>
   <style>
-    :root { color-scheme: light dark; }
+    :root {
+      color-scheme: light dark;
+      --bg: Canvas;
+      --fg: CanvasText;
+      --card: color-mix(in srgb, CanvasText 8%, Canvas 92%);
+      --border: color-mix(in srgb, CanvasText 16%, Canvas 84%);
+      --ok: #0a7;
+      --bad: #c21;
+      --muted: color-mix(in srgb, CanvasText 65%, Canvas 35%);
+      --accent: #376dff;
+    }
     * { box-sizing: border-box; }
     body {
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       margin: 0;
-      background: Canvas;
-      color: CanvasText;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       line-height: 1.45;
+      background: var(--bg);
+      color: var(--fg);
     }
     .app {
-      max-width: 980px;
+      max-width: 780px;
       margin: 0 auto;
       padding: 14px;
-      display: flex;
-      flex-direction: column;
+      display: grid;
       gap: 12px;
     }
-    h1 { margin: 2px 0 4px; font-size: 1.55rem; }
-    h2 { margin: 0 0 8px; font-size: 1.1rem; }
-    .row { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
-    button {
-      width: 100%;
-      min-height: 48px;
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 1.45rem; letter-spacing: 0.01em; }
+    h2 { font-size: 1.05rem; margin-bottom: 8px; }
+    h3 { font-size: 0.95rem; margin-bottom: 6px; }
+    .muted { color: var(--muted); }
+    .tiny { font-size: 0.8rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
       padding: 12px;
-      border-radius: 12px;
-      border: 1px solid #8884;
-      background: #8882;
-      cursor: pointer;
-      font-size: 0.98rem;
-      font-weight: 600;
-      text-align: left;
+      display: grid;
+      gap: 10px;
     }
-    button:hover { background: #8883; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .pill { display:inline-block; padding: 6px 10px; border-radius: 999px; border:1px solid #8884; background:#8882; font-size: 12px; }
-    .ok { color: #0a7; font-weight: 700; }
-    .bad { color: #c21; font-weight: 700; }
-    code, pre {
-      background: #8882;
-      border: 1px solid #8883;
+    .header-card { gap: 6px; }
+    .pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pill {
+      display: inline-block;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 0.75rem;
+      background: color-mix(in srgb, var(--card) 80%, Canvas 20%);
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; }
+    button {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      min-height: 38px;
+      padding: 8px 11px;
+      font: inherit;
+      font-size: 0.88rem;
+      font-weight: 600;
+      background: color-mix(in srgb, var(--card) 84%, Canvas 16%);
+      color: inherit;
+      cursor: pointer;
+      text-align: center;
+    }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .primary-btn {
+      background: color-mix(in srgb, var(--accent) 18%, var(--card) 82%);
+      border-color: color-mix(in srgb, var(--accent) 35%, var(--border) 65%);
+    }
+    .step-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 8px;
+    }
+    .step-item {
+      border: 1px solid var(--border);
       border-radius: 10px;
       padding: 10px;
-      white-space: pre-wrap;
-      word-break: break-word;
+      display: grid;
+      gap: 4px;
+      background: color-mix(in srgb, var(--card) 80%, Canvas 20%);
     }
-    pre { overflow: auto; }
-    .grid { display:grid; grid-template-columns: 1fr; gap: 12px; }
-    .card { border: 1px solid #8883; border-radius: 14px; padding: 12px; }
-    .muted { opacity: 0.75; }
-    .tiny { font-size: 12px; }
-    .status-lines { margin: 0; }
-    .steps { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
-    .step-line { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-    .step-desc { font-size: 0.92rem; }
+    .step-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
     .step-status {
-      font-size: 12px;
-      border: 1px solid #8884;
+      font-size: 0.72rem;
       border-radius: 999px;
+      border: 1px solid var(--border);
       padding: 2px 8px;
-      background: #8882;
       font-weight: 700;
+      text-transform: lowercase;
     }
     .step-status.not-run { color: #666; }
-    .step-status.success { color: #0a7; }
-    .step-status.failed { color: #c21; }
-    textarea {
-      width: 100%;
-      min-height: 88px;
+    .step-status.running { color: #a85f00; }
+    .step-status.success { color: var(--ok); }
+    .step-status.failed { color: var(--bad); }
+    .grid { display: grid; gap: 12px; }
+    .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .status-cell {
+      border: 1px solid var(--border);
       border-radius: 10px;
-      border: 1px solid #8884;
-      padding: 10px;
-      background: #8882;
+      padding: 8px;
+      font-size: 0.8rem;
+      background: color-mix(in srgb, var(--card) 80%, Canvas 20%);
+    }
+    .ok { color: var(--ok); font-weight: 700; }
+    .bad { color: var(--bad); font-weight: 700; }
+    textarea, input[type="search"] {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 9px;
+      background: color-mix(in srgb, var(--card) 82%, Canvas 18%);
       color: inherit;
       font: inherit;
+      font-size: 0.86rem;
     }
-    .journal-list { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 8px; }
-    .journal-item { border: 1px solid #8883; border-radius: 10px; padding: 8px; background: #8881; }
-    .journal-meta { font-size: 12px; opacity: 0.8; }
-    #qrCode img,
-    #qrCode canvas {
-      max-width: 100%;
-      height: auto;
+    details summary {
+      cursor: pointer;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .probe-group { margin-top: 6px; }
+    .probe-group .row { margin-top: 6px; }
+    .journal-summary {
+      border: 1px solid var(--border);
       border-radius: 10px;
-      border: 1px solid #8883;
-      background: #fff;
-      padding: 8px;
+      padding: 9px;
+      display: grid;
+      gap: 6px;
+      font-size: 0.8rem;
+      background: color-mix(in srgb, var(--card) 80%, Canvas 20%);
     }
-
-    @media (min-width: 720px) {
-      .app { padding: 16px; }
-      button {
-        width: auto;
-        min-width: 220px;
-        text-align: center;
-      }
-      .grid { grid-template-columns: 1fr 1fr; }
+    .journal-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 8px;
+      max-height: 240px;
+      overflow: auto;
+    }
+    .journal-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      font-size: 0.84rem;
+      background: color-mix(in srgb, var(--card) 79%, Canvas 21%);
+    }
+    .journal-meta { font-size: 0.76rem; color: var(--muted); margin-bottom: 5px; }
+    pre {
+      margin: 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 9px;
+      background: color-mix(in srgb, var(--card) 82%, Canvas 18%);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 260px;
+      overflow: auto;
+      font-size: 0.79rem;
+    }
+    #qrCode img, #qrCode canvas {
+      width: 100%;
+      max-width: 220px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      padding: 8px;
+      background: #fff;
+    }
+    @media (min-width: 760px) {
+      .app { padding: 18px; }
+      .grid.two { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
 <body>
   <main class="app">
-  <h1>Even Hub Starter Kit</h1>
-  <div class="row">
-    <span class="pill">Purpose: probe + docs + reusable template</span>
-    <span class="pill">Works best via GitHub Pages / HTTPS</span>
-    <span class="pill">Build: no bundler</span>
-  </div>
+    <section class="card header-card">
+      <h1>Even Hub Starter Kit</h1>
+      <p class="muted">Mobile-first test helper for human hardware validation. Use this to guide repeatable checks on real devices.</p>
+      <div class="pill-row">
+        <span class="pill">Static site · no build step</span>
+        <span class="pill">HTTPS recommended</span>
+        <span class="pill">Cache-busted QR flow</span>
+      </div>
+    </section>
 
-  <div class="card">
-    <h2>Glasses QR Test Tool</h2>
-    <p class="muted">Generate a fresh GitHub Pages test link + QR code for real-device testing.</p>
-    <div class="row">
-      <button id="btnGenerateQr">Generate QR for Glasses Test</button>
-    </div>
-    <p class="tiny muted">Each QR is single-use because it includes a unique cache-busting value.</p>
-    <p class="tiny"><strong>URL:</strong> <span id="qrUrl">(not generated yet)</span></p>
-    <p class="tiny"><strong>Timestamp:</strong> <span id="qrTimestamp">(not generated yet)</span></p>
-    <div id="qrCode" aria-label="QR code output"></div>
-  </div>
+    <section class="card">
+      <h2>Recommended Test Loop</h2>
+      <p class="tiny muted">Default path: follow each numbered step and watch status updates.</p>
+      <ol class="step-list">
+        <li class="step-item">
+          <div class="step-head"><strong>1) Generate QR (cache-busted)</strong><span id="stepStatusQr" class="step-status not-run">not run</span></div>
+          <p class="tiny muted">Create a fresh QR URL so your device loads the newest build.</p>
+          <div class="row"><button id="btnGenerateQr" class="primary-btn">Generate Fresh QR</button></div>
+          <p class="tiny"><strong>URL:</strong> <span id="qrUrl">(not generated yet)</span></p>
+          <p class="tiny"><strong>Timestamp:</strong> <span id="qrTimestamp">(not generated yet)</span></p>
+          <div id="qrCode" aria-label="QR code output"></div>
+        </li>
+        <li class="step-item">
+          <div class="step-head"><strong>2) Boot / Reconnect</strong><span id="stepStatusBoot" class="step-status not-run">not run</span></div>
+          <p class="tiny muted">Connect to bridge runtime and confirm readiness.</p>
+          <div class="row"><button id="btnBoot" class="primary-btn">Boot / Reconnect</button></div>
+        </li>
+        <li class="step-item">
+          <div class="step-head"><strong>3) Run Hello World Demo</strong><span id="stepStatusHello" class="step-status not-run">not run</span></div>
+          <p class="tiny muted">Try startup page creation up to 3 times with short delays.</p>
+          <div class="row"><button id="btnHelloWorld" class="primary-btn">Run Hello World Demo</button></div>
+        </li>
+        <li class="step-item">
+          <div class="step-head"><strong>4) Record confirmation</strong><span id="stepStatusJournal" class="step-status not-run">not run</span></div>
+          <p class="tiny muted">Save your outcome with timestamp + notes for later handoff.</p>
+        </li>
+      </ol>
+    </section>
 
+    <section class="card">
+      <h2>Live Status</h2>
+      <div class="status-grid">
+        <div class="status-cell">SDK: <span id="sdkStatus" class="bad">not loaded</span></div>
+        <div class="status-cell">flutter_inappwebview: <span id="fiawvStatus" class="bad">unknown</span></div>
+        <div class="status-cell">Bridge ready: <span id="bridgeStatus" class="bad">unknown</span></div>
+        <div class="status-cell">Startup page: <span id="startupStatus" class="bad">not created</span></div>
+      </div>
+    </section>
 
-  <div class="card">
-    <h2>Testing Steps (Recommended Order)</h2>
-    <p class="muted">Follow these in order for a repeatable glasses test.</p>
-    <ol class="steps">
-      <li>
-        <div class="step-line">
-          <strong>Generate fresh QR</strong>
-          <span id="stepStatusQr" class="step-status not-run">not run</span>
+    <section class="card">
+      <details id="advancedPanel">
+        <summary>Advanced probes (optional)</summary>
+        <p class="tiny muted">Collapsed by default so the main flow stays focused.</p>
+        <input id="advancedSearch" type="search" placeholder="Search advanced probes (example: audio)" />
+
+        <div class="probe-group" data-group="Bridge">
+          <h3>Bridge</h3>
+          <div class="row">
+            <button data-probe="Bridge" id="btnGetUser">getUserInfo()</button>
+            <button data-probe="Bridge" id="btnGetDevice">getDeviceInfo()</button>
+          </div>
         </div>
-        <div class="step-desc muted">Click <strong>Generate QR for Glasses Test</strong> so you scan a fresh cache-busted URL.</div>
-      </li>
-      <li>
-        <div class="step-line">
-          <strong>Connect bridge</strong>
-          <span id="stepStatusBoot" class="step-status not-run">not run</span>
+
+        <div class="probe-group" data-group="Page">
+          <h3>Page</h3>
+          <div class="row">
+            <button data-probe="Page" id="btnCreateStartup">createStartUpPageContainer()</button>
+            <button data-probe="Page" id="btnTextUpgrade">textContainerUpgrade()</button>
+            <button data-probe="Page" id="btnRebuild">rebuildPageContainer()</button>
+            <button data-probe="Page" id="btnShutdown">shutDownPageContainer()</button>
+          </div>
         </div>
-        <div class="step-desc muted">Click <strong>Boot / Reconnect</strong> and confirm Bridge ready becomes ready.</div>
-      </li>
-      <li>
-        <div class="step-line">
-          <strong>Run hello world demo</strong>
-          <span id="stepStatusHello" class="step-status not-run">not run</span>
+
+        <div class="probe-group" data-group="Storage">
+          <h3>Storage</h3>
+          <div class="row">
+            <button data-probe="Storage" id="btnSetLS">setLocalStorage()</button>
+            <button data-probe="Storage" id="btnGetLS">getLocalStorage()</button>
+          </div>
         </div>
-        <div class="step-desc muted">Click <strong>Run Hello World Demo</strong> and watch for startup page created.</div>
-      </li>
-    </ol>
-  </div>
 
+        <div class="probe-group" data-group="Audio">
+          <h3>Audio</h3>
+          <div class="row">
+            <button data-probe="Audio" id="btnStartMic">audioControl(true)</button>
+            <button data-probe="Audio" id="btnStopMic">audioControl(false)</button>
+          </div>
+        </div>
+      </details>
+    </section>
 
-  <div class="card">
-    <h2>Developer Journal (saved on this device)</h2>
-    <p class="muted">Record confirmed wins as you test. Entries are cumulative and stay after refresh.</p>
-    <label class="tiny" for="journalNotes"><strong>Notes for this confirmation</strong></label>
-    <textarea id="journalNotes" placeholder="Example: Startup page created on glasses after scan + hello world run."></textarea>
-    <div class="row">
-      <button id="btnJournalConfirm">Record Confirmed Success</button>
-      <button id="btnJournalReset">Reset Journal</button>
-      <button id="btnCopyReport">Copy Test Report</button>
-    </div>
-    <ol id="journalList" class="journal-list"></ol>
-    <p id="journalEmpty" class="tiny muted">No confirmations yet.</p>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <h2>Status</h2>
-      <p class="muted">Bridge/SDK connectivity + last action.</p>
-      <p class="status-lines">
-        SDK: <span id="sdkStatus" class="bad">not loaded</span><br/>
-        flutter_inappwebview: <span id="fiawvStatus" class="bad">unknown</span><br/>
-        Bridge ready: <span id="bridgeStatus" class="bad">unknown</span><br/>
-        Startup page: <span id="startupStatus" class="bad">not created</span>
-      </p>
-
-      <div class="row">
-        <button id="btnBoot">Boot / Reconnect</button>
-        <button id="btnHelloWorld">Run Hello World Demo</button>
-        <button id="btnGetUser">getUserInfo()</button>
-        <button id="btnGetDevice">getDeviceInfo()</button>
+    <section class="grid two">
+      <div class="card">
+        <h2>Capabilities Matrix (auto-filled)</h2>
+        <pre id="matrix">(nothing yet)</pre>
       </div>
 
-      <div class="row">
-        <button id="btnCreateStartup">createStartUpPageContainer()</button>
-        <button id="btnTextUpgrade">textContainerUpgrade()</button>
-        <button id="btnRebuild">rebuildPageContainer()</button>
-        <button id="btnShutdown">shutDownPageContainer()</button>
+      <div class="card">
+        <h2>Developer Journal</h2>
+        <p class="tiny muted">Entries are saved in this browser using localStorage.</p>
+
+        <div class="journal-summary" id="journalSummary">Loading summary…</div>
+
+        <label for="journalOutcome" class="tiny"><strong>Outcome</strong></label>
+        <select id="journalOutcome">
+          <option value="success">Success / win</option>
+          <option value="failure">Failure / blocker</option>
+        </select>
+
+        <label class="tiny" for="journalNotes"><strong>Notes</strong></label>
+        <textarea id="journalNotes" placeholder="What happened on the real device? Include anything that helps your next test run."></textarea>
+
+        <div class="row">
+          <button id="btnJournalConfirm" class="primary-btn">Record confirmation</button>
+          <button id="btnJournalReset">Reset journal</button>
+        </div>
+        <div class="row">
+          <button id="btnCopySummary">Copy Summary</button>
+          <button id="btnCopyFullReport">Copy Full Report</button>
+          <button id="btnDownloadReport">Download Report (.md)</button>
+        </div>
+
+        <p id="journalEmpty" class="tiny muted">No history yet.</p>
+        <ol id="journalList" class="journal-list"></ol>
       </div>
+    </section>
 
-      <div class="row">
-        <button id="btnSetLS">setLocalStorage()</button>
-        <button id="btnGetLS">getLocalStorage()</button>
-        <button id="btnStartMic">audioControl(true)</button>
-        <button id="btnStopMic">audioControl(false)</button>
-      </div>
-
-      <p class="tiny muted">
-        Tip: start with <strong>Run Hello World Demo</strong>. It boots bridge + tries startup container up to 3 times with short delays.
-      </p>
-    </div>
-
-    <div class="card">
-      <h2>Capabilities Matrix (auto-filled)</h2>
-      <p class="muted">This panel updates as you click probes. Copy/paste into docs later.</p>
-      <pre id="matrix">(nothing yet)</pre>
-      <p class="tiny muted">Saved in-memory only. If you want persistence, we can add “download matrix.json” or push to a gist later.</p>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Log</h2>
-    <pre id="log"></pre>
-  </div>
-
+    <section class="card">
+      <h2>Log</h2>
+      <pre id="log"></pre>
+    </section>
   </main>
 
   <script src="./vendor/qrcode.min.js"></script>

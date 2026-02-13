@@ -77,6 +77,34 @@
       color: #1140a3;
       font-weight: 600;
     }
+    .btn-flat-blue {
+      background: #1677ea;
+      border-color: #1677ea;
+      color: #fff;
+      font-weight: 600;
+      box-shadow: none;
+    }
+    .btn-flat-blue:hover {
+      background: #126ad1;
+      border-color: #126ad1;
+    }
+    .btn-flat-black {
+      background: #111827;
+      border-color: #111827;
+      color: #fff;
+      font-weight: 600;
+      box-shadow: none;
+    }
+    .btn-flat-black:hover {
+      background: #030712;
+      border-color: #030712;
+    }
+    .btn-flat-white {
+      background: #fff;
+      border-color: #d1d5db;
+      color: #111827;
+      box-shadow: none;
+    }
     .run-test {
       background: #1677ea;
       border: 1px solid #1677ea;
@@ -163,15 +191,15 @@
         <div id="lookForViewerPage2" class="code-viewer"></div>
       </div>
       <div class="btn-row">
-        <button id="btnYes" class="btn-flat-blue">Yes</button>
-        <button id="btnNo" class="btn-flat-black">No</button>
+        <button id="btnYes" class="yes">Yes</button>
+        <button id="btnNo" class="no">No</button>
         <button id="btnNotSure" class="btn-flat-white">Not Sure</button>
       </div>
       <div id="detailsWrap" hidden>
         <p class="muted">Please explain what you experienced.</p>
         <textarea id="notesInput" placeholder="Describe what happened on the glasses (what you expected vs what you saw)."></textarea>
         <div class="btn-row">
-          <button id="btnSubmit" class="primary">Submit Results to GitHub</button>
+          <button id="btnSubmit" class="btn-flat-blue">Submit Results to GitHub</button>
         </div>
       </div>
       <p id="submitStatus" class="status"></p>
@@ -181,9 +209,9 @@
       <h1 id="confirmationTitle">Saved successfully.</h1>
       <p>What would you like to do next?</p>
       <div class="btn-row">
-        <button id="btnNext" class="primary">Run the next test</button>
-        <button id="btnDebug">Debug</button>
-        <button id="btnRetry">Retry</button>
+        <button id="btnNext" class="btn-flat-blue">Run the Next Test</button>
+        <button id="btnDebug" class="btn-flat-black">Debug</button>
+        <button id="btnRetry" class="btn-flat-white">Retry</button>
       </div>
       <div id="debugWrap" hidden class="page">
         <h2>Debug prompt (copy and paste into Codex/AI agent)</h2>

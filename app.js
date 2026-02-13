@@ -194,13 +194,13 @@ async function probeCreateStartup() {
       containerTotalNum: 1,
       textObject: [
         {
-      xPosition: 0,
-      yPosition: 0,
-      width: 480,
-      height: 80,
-      containerID: 1,
-      containerName: "t1",
-      content: "Hello from EvenHub Starter Kit!"
+          xPosition: 0,
+          yPosition: 0,
+          width: 480,
+          height: 80,
+          containerID: state.container.containerID,
+          containerName: state.container.containerName,
+          content: "Hello from EvenHub Starter Kit!"
         },
       ],
     });

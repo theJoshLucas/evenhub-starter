@@ -1,103 +1,83 @@
-// Even Hub Starter Kit - no build step
-// Guided "Next Test" flow + local journal + exportable repo run file.
-
 const $ = (id) => document.getElementById(id);
 
 const ui = {
-  sdkStatus: $("sdkStatus"),
-  fiawvStatus: $("fiawvStatus"),
-  bridgeStatus: $("bridgeStatus"),
-  startupStatus: $("startupStatus"),
-  log: $("log"),
-  matrix: $("matrix"),
-  btnRunNextTest: $("btnRunNextTest"),
-  runState: $("runState"),
-  confirmationSection: $("confirmationSection"),
+  page1: $("page1"),
+  page2: $("page2"),
+  page3: $("page3"),
+  testTitle: $("testTitle"),
+  testGoal: $("testGoal"),
+  lookForViewer: $("lookForViewer"),
+  btnRunTest: $("btnRunTest"),
+  runStatus: $("runStatus"),
+  btnYes: $("btnYes"),
+  btnNo: $("btnNo"),
+  btnNotSure: $("btnNotSure"),
+  detailsWrap: $("detailsWrap"),
   notesInput: $("notesInput"),
-  btnExportRun: $("btnExportRun"),
-  githubTokenInput: $("githubTokenInput"),
-  githubRepoInput: $("githubRepoInput"),
-  githubBranchInput: $("githubBranchInput"),
-  btnSaveGitHubSettings: $("btnSaveGitHubSettings"),
-  githubSettingsStatus: $("githubSettingsStatus"),
-  lastSavedMessage: $("lastSavedMessage"),
-  nextTestTitle: $("nextTestTitle"),
-  nextTestGoal: $("nextTestGoal"),
-  nextTestLookFor: $("nextTestLookFor"),
-  advancedSearch: $("advancedSearch"),
-  btnGetUser: $("btnGetUser"),
-  btnGetDevice: $("btnGetDevice"),
-  btnCreateStartup: $("btnCreateStartup"),
-  btnTextUpgrade: $("btnTextUpgrade"),
-  btnRebuild: $("btnRebuild"),
-  btnShutdown: $("btnShutdown"),
-  btnSetLS: $("btnSetLS"),
-  btnGetLS: $("btnGetLS"),
-  btnStartMic: $("btnStartMic"),
-  btnStopMic: $("btnStopMic"),
+  btnSubmit: $("btnSubmit"),
+  submitStatus: $("submitStatus"),
+  confirmationTitle: $("confirmationTitle"),
+  btnNext: $("btnNext"),
+  btnDebug: $("btnDebug"),
+  btnRetry: $("btnRetry"),
+  debugWrap: $("debugWrap"),
+  debugPrompt: $("debugPrompt"),
+  btnCopyPrompt: $("btnCopyPrompt"),
 };
 
-const NEXT_TEST = {
-  id: "hello-world-startup",
-  title: "Hello World startup page appears on glasses",
-  goal: "Verify startup page creation can be triggered from this page.",
-  lookFor: [
-    "A new startup message appears on the glasses display.",
-    "No obvious crash/freeze while loading.",
-    "Result appears within a few seconds of running test.",
-  ],
-};
+const GITHUB_EXPORT_SETTINGS_KEY = "starterKit.githubExportSettings.v1";
+const TEST_COUNTER_KEY = "starterKit.testCounter.v1";
+
+const TESTS = [
+  {
+    id: "hello-world-startup",
+    title: "Hello World startup page appears on glasses",
+    goal: "Verify startup page creation can be triggered from this page.",
+    lookFor: [
+      "EXPECTED OUTPUT ON GLASSES:",
+      "",
+      "HELLO WORLD",
+      "",
+      "TIMESTAMP FORMAT: YYYY-MM-DD HH:MM:SS",
+      "",
+      "SCREEN SHOULD STAY RESPONSIVE (NO FREEZE)",
+      "RESULT SHOULD APPEAR WITHIN 3-5 SECONDS",
+    ],
+  },
+];
 
 const state = {
   SDK: null,
   bridge: null,
-  matrix: {},
-  runs: [],
-  pendingRun: null,
+  currentTestNumber: getCurrentCounter(),
+  currentTest: null,
+  activeRun: null,
 };
-
-const RUN_STORAGE_KEY = "starterKit.testingRuns.v1";
-const GITHUB_EXPORT_SETTINGS_KEY = "starterKit.githubExportSettings.v1";
 
 function isoNow() {
   return new Date().toISOString();
 }
 
-function nowForLog() {
-  return isoNow().replace("T", " ").replace("Z", "");
+function getCurrentCounter() {
+  const raw = Number(localStorage.getItem(TEST_COUNTER_KEY) || "1");
+  return Number.isFinite(raw) && raw > 0 ? raw : 1;
 }
 
-function log(...args) {
-  const line = args.map((a) => (typeof a === "string" ? a : JSON.stringify(a, null, 2))).join(" ");
-  ui.log.textContent += `[${nowForLog()}] ${line}\n`;
-  ui.log.scrollTop = ui.log.scrollHeight;
+function bumpCounter() {
+  state.currentTestNumber += 1;
+  localStorage.setItem(TEST_COUNTER_KEY, String(state.currentTestNumber));
 }
 
-function setStatus(el, ok, text) {
-  el.textContent = text;
-  el.className = ok ? "ok" : "bad";
+function setPage(pageNumber) {
+  ui.page1.hidden = pageNumber !== 1;
+  ui.page2.hidden = pageNumber !== 2;
+  ui.page3.hidden = pageNumber !== 3;
 }
 
-function matrixSet(key, value) {
-  state.matrix[key] = value;
-  ui.matrix.textContent = JSON.stringify(state.matrix, null, 2);
+function getActiveTest() {
+  const idx = (state.currentTestNumber - 1) % TESTS.length;
+  return TESTS[idx];
 }
-
-function saveRuns() {
-  localStorage.setItem(RUN_STORAGE_KEY, JSON.stringify(state.runs));
-}
-
-function loadRuns() {
-  try {
-    const raw = localStorage.getItem(RUN_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    state.runs = Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    state.runs = [];
-    log("Run history load error:", String(e));
-  }
-}
-
 
 function loadGitHubExportSettings() {
   try {
@@ -111,34 +91,9 @@ function loadGitHubExportSettings() {
 
     if (!repo || !token) return null;
     return { repo, branch: branch || "main", token };
-  } catch (e) {
+  } catch {
     return null;
   }
-}
-
-function saveGitHubExportSettings() {
-  const repo = (ui.githubRepoInput.value || "").trim();
-  const branch = (ui.githubBranchInput.value || "main").trim() || "main";
-  const token = (ui.githubTokenInput.value || "").trim();
-
-  if (!repo || !token) {
-    ui.githubSettingsStatus.textContent = "Missing repo or token. Auto-commit still off.";
-    return;
-  }
-
-  const settings = { repo, branch, token };
-  localStorage.setItem(GITHUB_EXPORT_SETTINGS_KEY, JSON.stringify(settings));
-  ui.githubSettingsStatus.textContent = `Auto-commit ready for ${repo} (${branch}).`;
-  ui.githubTokenInput.value = "";
-}
-
-function hydrateGitHubExportSettingsUi() {
-  const settings = loadGitHubExportSettings();
-  if (!settings) return;
-
-  ui.githubRepoInput.value = settings.repo;
-  ui.githubBranchInput.value = settings.branch;
-  ui.githubSettingsStatus.textContent = `Auto-commit ready for ${settings.repo} (${settings.branch}).`;
 }
 
 function parseOwnerRepo(repoValue) {
@@ -168,7 +123,7 @@ async function getFileSha(owner, repo, branch, path, token) {
 
 async function commitRunToGitHub(filename, content) {
   const settings = loadGitHubExportSettings();
-  if (!settings) return false;
+  if (!settings) throw new Error("GitHub settings/token not found in local storage.");
 
   const ownerRepo = parseOwnerRepo(settings.repo);
   if (!ownerRepo) throw new Error("GitHub repo format must be owner/repo.");
@@ -202,26 +157,6 @@ async function commitRunToGitHub(filename, content) {
   return true;
 }
 
-function getLiveNotes() {
-  return (ui.notesInput.value || "").trim();
-}
-
-function setRunState(text, className = "") {
-  ui.runState.textContent = text;
-  ui.runState.className = `status-chip ${className}`.trim();
-}
-
-function renderNextTest() {
-  ui.nextTestTitle.textContent = NEXT_TEST.title;
-  ui.nextTestGoal.textContent = NEXT_TEST.goal;
-  ui.nextTestLookFor.innerHTML = "";
-  for (const item of NEXT_TEST.lookFor) {
-    const li = document.createElement("li");
-    li.textContent = item;
-    ui.nextTestLookFor.appendChild(li);
-  }
-}
-
 function sanitizeFileText(text) {
   return text.toLowerCase().replace(/[^a-z0-9\-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
@@ -233,8 +168,7 @@ function buildRunMarkdown(run) {
     `- test_id: ${run.testId}`,
     `- run_at: ${run.runAt}`,
     `- result: ${run.result}`,
-    `- tested_url: ${run.testedUrl}`,
-    `- bridge_ready: ${run.bridgeReady}`,
+    `- answer: ${run.answer}`,
     `- startup_created: ${run.startupCreated}`,
     "",
     "## Goal",
@@ -243,39 +177,10 @@ function buildRunMarkdown(run) {
     "## Expected on glasses",
     ...run.lookFor.map((line) => `- ${line}`),
     "",
-    "## Human confirmation",
-    `Answer: ${run.answer}`,
-    "",
     "## Notes",
     run.notes || "(none)",
     "",
   ].join("\n");
-}
-
-function createDownload(filename, content) {
-  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-function buildGitHubPagesUrl() {
-  const owner = "theJoshLucas";
-  const repo = "evenhub-starter";
-  return `https://${owner}.github.io/${repo}/index.html`;
-}
-
-function buildCacheBustedUrl() {
-  const base = buildGitHubPagesUrl();
-  const stamp = Date.now();
-  const url = new URL(base);
-  url.searchParams.set("cb", String(stamp));
-  return { url: url.toString(), timestamp: new Date(stamp).toISOString() };
 }
 
 async function importSdk() {
@@ -287,308 +192,189 @@ async function importSdk() {
   let lastErr = null;
   for (const url of candidates) {
     try {
-      log(`Attempting SDK import: ${url}`);
       const mod = await import(url);
       if (mod?.EvenAppBridge) return mod;
       lastErr = new Error("Module loaded but missing EvenAppBridge export.");
     } catch (e) {
       lastErr = e;
-      log(`SDK import failed: ${String(e)}`);
     }
   }
   throw lastErr ?? new Error("SDK import failed (unknown).");
 }
 
-async function boot() {
-  setRunState("connecting", "running");
-  try {
-    setStatus(ui.sdkStatus, false, "loading…");
-    setStatus(ui.fiawvStatus, false, "checking…");
-    setStatus(ui.bridgeStatus, false, "connecting…");
-
-    const hasFIAWV = !!(window.flutter_inappwebview && window.flutter_inappwebview.callHandler);
-    setStatus(ui.fiawvStatus, hasFIAWV, hasFIAWV ? "present ✅" : "missing ❌");
-    matrixSet("flutter_inappwebview.present", hasFIAWV);
-
-    state.SDK = await importSdk();
-    setStatus(ui.sdkStatus, true, "loaded ✅");
-    matrixSet("sdk.loaded", true);
-
-    const { waitForEvenAppBridge, EvenAppBridge } = state.SDK;
-    try { EvenAppBridge.getInstance(); } catch (_) {}
-
-    state.bridge = await waitForEvenAppBridge();
-    setStatus(ui.bridgeStatus, true, "ready ✅");
-    matrixSet("bridge.ready", true);
-
-    return true;
-  } catch (e) {
-    log("Boot FAILED:", String(e));
-    setStatus(ui.sdkStatus, false, "failed ❌");
-    setStatus(ui.bridgeStatus, false, "failed ❌");
-    matrixSet("boot.error", String(e));
-    return false;
-  }
-}
-
 async function ensureBridge() {
-  if (!state.bridge) {
-    const ok = await boot();
-    if (!ok || !state.bridge) throw new Error("Bridge not available (boot failed).");
-  }
+  if (state.bridge) return state.bridge;
+  state.SDK = state.SDK || await importSdk();
+  const { waitForEvenAppBridge, EvenAppBridge } = state.SDK;
+  try { EvenAppBridge.getInstance(); } catch {}
+  state.bridge = await waitForEvenAppBridge();
   return state.bridge;
 }
 
 async function probeCreateStartup() {
   const bridge = await ensureBridge();
-  try {
-    const { CreateStartUpPageContainer } = state.SDK;
-    const payload = new CreateStartUpPageContainer({
-      containerTotalNum: 1,
-      textObject: [{
-        xPosition: 0,
-        yPosition: 0,
-        width: 480,
-        height: 80,
-        containerID: 1,
-        containerName: "t1",
-        content: `Hello world @ ${nowForLog()}`,
-      }],
-    });
-    const result = await bridge.createStartUpPageContainer(payload);
-    const ok = result === 0 || result === "0";
-    setStatus(ui.startupStatus, ok, ok ? "created ✅" : `failed (${result}) ❌`);
-    matrixSet("createStartUpPageContainer.ok", ok);
-    matrixSet("createStartUpPageContainer.result", result);
-    return ok;
-  } catch (e) {
-    setStatus(ui.startupStatus, false, "failed ❌");
-    matrixSet("createStartUpPageContainer.ok", false);
-    matrixSet("createStartUpPageContainer.error", String(e));
-    return false;
-  }
+  const { CreateStartUpPageContainer } = state.SDK;
+  const payload = new CreateStartUpPageContainer({
+    containerTotalNum: 1,
+    textObject: [{
+      xPosition: 0,
+      yPosition: 0,
+      width: 480,
+      height: 80,
+      containerID: 1,
+      containerName: "t1",
+      content: `Hello world @ ${isoNow()}`,
+    }],
+  });
+  const result = await bridge.createStartUpPageContainer(payload);
+  return result === 0 || result === "0";
 }
 
-async function runNextTest() {
-  ui.btnRunNextTest.disabled = true;
-  ui.confirmationSection.hidden = true;
-  ui.btnExportRun.disabled = true;
-  state.pendingRun = null;
+async function runTestFlow() {
+  const test = state.currentTest;
+  ui.runStatus.textContent = "Running test…";
+  ui.runStatus.className = "status";
+  ui.btnRunTest.disabled = true;
 
+  let startupCreated = false;
   try {
-    setRunState("running", "running");
-    const { url, timestamp } = buildCacheBustedUrl();
-    matrixSet("qrTest.url", url);
-    matrixSet("qrTest.timestamp", timestamp);
-
-    await boot();
-    const startupCreated = await probeCreateStartup();
-
-    state.pendingRun = {
-      testId: NEXT_TEST.id,
-      testTitle: NEXT_TEST.title,
-      goal: NEXT_TEST.goal,
-      lookFor: NEXT_TEST.lookFor,
-      runAt: isoNow(),
-      testedUrl: url,
-      bridgeReady: !!state.matrix["bridge.ready"],
-      startupCreated,
-    };
-
-    ui.confirmationSection.hidden = false;
-    setRunState("waiting for human confirmation", "running");
-    log("Next test finished automation. Waiting for human confirmation.");
+    startupCreated = await probeCreateStartup();
+    ui.runStatus.textContent = startupCreated
+      ? "Automation finished. Now confirm what you saw on the glasses."
+      : "Automation ran, but startup creation returned an error. Please continue with your observation.";
   } catch (e) {
-    setRunState("failed", "failed");
-    log("Run Next Test failed:", String(e));
+    ui.runStatus.textContent = `Automation warning: ${String(e)}`;
+    ui.runStatus.className = "status err";
   } finally {
-    ui.btnRunNextTest.disabled = false;
+    ui.btnRunTest.disabled = false;
   }
-}
 
-function saveRun(answer) {
-  if (!state.pendingRun) return;
-
-  const normalizedResult = answer === "yes" ? "pass" : answer === "no" ? "fail" : "not-sure";
-  const run = {
-    ...state.pendingRun,
-    answer,
-    result: normalizedResult,
-    notes: getLiveNotes(),
-    savedAt: isoNow(),
+  state.activeRun = {
+    testId: test.id,
+    testTitle: test.title,
+    goal: test.goal,
+    lookFor: test.lookFor,
+    runAt: isoNow(),
+    startupCreated,
+    answer: "",
+    notes: "",
+    result: "",
+    savedFile: "",
   };
 
-  state.runs.push(run);
-  saveRuns();
-
-  const isoName = run.savedAt.replace(/[:.]/g, "-");
-  const filename = `${isoName}__${sanitizeFileText(run.testId)}__${sanitizeFileText(run.result)}.md`;
-  run.exportFile = filename;
-
-  state.pendingRun = run;
-  ui.btnExportRun.disabled = false;
-  ui.lastSavedMessage.textContent = `Saved locally. Ready to export: testing/runs/${filename}`;
-  setRunState(`saved: ${run.result}`, run.result === "pass" ? "success" : run.result === "fail" ? "failed" : "");
-  log("Run saved locally:", run);
+  ui.submitStatus.textContent = "";
+  ui.detailsWrap.hidden = true;
+  ui.notesInput.value = "";
+  setPage(2);
 }
 
-async function exportRunFile() {
-  if (!state.pendingRun?.exportFile) return;
+async function saveResult(answer) {
+  if (!state.activeRun) return;
+  const notes = (ui.notesInput.value || "").trim();
+  const needsNotes = answer === "no" || answer === "not-sure";
 
-  state.pendingRun.notes = getLiveNotes();
-  const content = buildRunMarkdown(state.pendingRun);
+  if (needsNotes && !notes) {
+    ui.submitStatus.textContent = "Please add details before submitting to GitHub.";
+    ui.submitStatus.className = "status err";
+    return;
+  }
+
+  ui.submitStatus.textContent = "Saving Results to GitHub…";
+  ui.submitStatus.className = "status";
+
+  const normalizedResult = answer === "yes" ? "pass" : answer === "no" ? "fail" : "not-sure";
+  state.activeRun.answer = answer;
+  state.activeRun.notes = notes;
+  state.activeRun.result = normalizedResult;
+
+  const stamp = isoNow().replace(/[:.]/g, "-");
+  const filename = `${stamp}__${sanitizeFileText(state.activeRun.testId)}__${sanitizeFileText(normalizedResult)}.md`;
+  state.activeRun.savedFile = filename;
 
   try {
-    const committed = await commitRunToGitHub(state.pendingRun.exportFile, content);
-    if (committed) {
-      ui.lastSavedMessage.textContent = `Committed to repo: testing/runs/${state.pendingRun.exportFile}`;
-      log("Committed run file to GitHub:", state.pendingRun.exportFile);
-      return;
-    }
+    const content = buildRunMarkdown(state.activeRun);
+    await commitRunToGitHub(filename, content);
+    ui.confirmationTitle.textContent = `Saved successfully to testing/runs/${filename}`;
+    ui.submitStatus.textContent = "";
+    setPage(3);
   } catch (e) {
-    log("Auto-commit failed, falling back to download:", String(e));
-    ui.lastSavedMessage.textContent = `Auto-commit failed (${String(e)}). Downloading file instead.`;
-  }
-
-  createDownload(state.pendingRun.exportFile, content);
-  log("Exported run file as download:", state.pendingRun.exportFile);
-}
-
-async function probeGetUserInfo() {
-  const bridge = await ensureBridge();
-  try {
-    const user = await bridge.getUserInfo();
-    matrixSet("getUserInfo.ok", true);
-    matrixSet("getUserInfo.value", user);
-  } catch (e) {
-    matrixSet("getUserInfo.ok", false);
-    matrixSet("getUserInfo.error", String(e));
+    ui.submitStatus.textContent = `Save failed: ${String(e)}`;
+    ui.submitStatus.className = "status err";
   }
 }
 
-async function probeGetDeviceInfo() {
-  const bridge = await ensureBridge();
-  try {
-    const dev = await bridge.getDeviceInfo();
-    matrixSet("getDeviceInfo.ok", true);
-    matrixSet("getDeviceInfo.value", dev);
-  } catch (e) {
-    matrixSet("getDeviceInfo.ok", false);
-    matrixSet("getDeviceInfo.error", String(e));
-  }
+function buildDebugPrompt() {
+  const run = state.activeRun;
+  const summary = run
+    ? `- Test: ${run.testTitle}\n- Result selected by human: ${run.answer}\n- Notes: ${run.notes || "(none)"}\n- Startup call success: ${run.startupCreated}`
+    : "- No run data found.";
+
+  return [
+    "# Debug Request for Follow-up Test",
+    "",
+    "I just ran a glasses test in this repository and need help debugging.",
+    "",
+    "## Repo Context",
+    "Please use the CURRENT repo as the source of truth.",
+    "",
+    "## What happened",
+    summary,
+    "",
+    "## What I need from you",
+    "1. Explain the likely root cause in plain English.",
+    "2. Suggest the smallest safe code change to improve reliability.",
+    "3. Generate one follow-up manual test with exact expected glasses output.",
+    "4. Tell me exactly which files to inspect next.",
+    "",
+  ].join("\n");
 }
 
-async function probeTextUpgrade() {
-  const bridge = await ensureBridge();
-  try {
-    const { TextContainerUpgrade } = state.SDK;
-    const text = `Upgraded @ ${nowForLog()}\nIf you see this on the glasses, textContainerUpgrade works.`;
-    const payload = new TextContainerUpgrade({ containerID: 1, containerName: "t1", contentOffset: 0, contentLength: text.length, content: text });
-    const ok = await bridge.textContainerUpgrade(payload);
-    matrixSet("textContainerUpgrade.ok", !!ok);
-  } catch (e) {
-    matrixSet("textContainerUpgrade.ok", false);
-    matrixSet("textContainerUpgrade.error", String(e));
-  }
+function resetPage1(advanceCounter) {
+  if (advanceCounter) bumpCounter();
+  state.currentTest = getActiveTest();
+
+  ui.testTitle.textContent = `Test #${state.currentTestNumber}: ${state.currentTest.title}`;
+  ui.testGoal.textContent = state.currentTest.goal;
+  ui.lookForViewer.textContent = state.currentTest.lookFor.join("\n");
+
+  ui.runStatus.textContent = "";
+  ui.runStatus.className = "status";
+  ui.submitStatus.textContent = "";
+  ui.detailsWrap.hidden = true;
+  ui.notesInput.value = "";
+  ui.debugWrap.hidden = true;
+  ui.debugPrompt.textContent = "";
+  setPage(1);
 }
 
-async function probeRebuild() {
-  const bridge = await ensureBridge();
-  try {
-    const { RebuildPageContainer } = state.SDK;
-    const payload = new RebuildPageContainer({
-      containerTotalNum: 1,
-      textObject: [{ xPosition: 0, yPosition: 0, width: 480, height: 80, containerID: 1, containerName: "t1", content: `Rebuild @ ${nowForLog()}` }],
-    });
-    const ok = await bridge.rebuildPageContainer(payload);
-    matrixSet("rebuildPageContainer.ok", !!ok);
-  } catch (e) {
-    matrixSet("rebuildPageContainer.ok", false);
-    matrixSet("rebuildPageContainer.error", String(e));
-  }
-}
-
-async function probeShutdown() {
-  const bridge = await ensureBridge();
-  try {
-    const ok = await bridge.shutDownPageContainer(1);
-    matrixSet("shutDownPageContainer.ok", !!ok);
-  } catch (e) {
-    matrixSet("shutDownPageContainer.ok", false);
-    matrixSet("shutDownPageContainer.error", String(e));
-  }
-}
-
-async function probeSetLocalStorage() {
-  const bridge = await ensureBridge();
-  try {
-    const key = "starterKit.lastSet";
-    const val = nowForLog();
-    const ok = await bridge.setLocalStorage(key, val);
-    matrixSet("setLocalStorage.ok", !!ok);
-    matrixSet("setLocalStorage.last", { key, val });
-  } catch (e) {
-    matrixSet("setLocalStorage.ok", false);
-    matrixSet("setLocalStorage.error", String(e));
-  }
-}
-
-async function probeGetLocalStorage() {
-  const bridge = await ensureBridge();
-  try {
-    const key = "starterKit.lastSet";
-    const val = await bridge.getLocalStorage(key);
-    matrixSet("getLocalStorage.ok", true);
-    matrixSet("getLocalStorage.last", { key, val });
-  } catch (e) {
-    matrixSet("getLocalStorage.ok", false);
-    matrixSet("getLocalStorage.error", String(e));
-  }
-}
-
-async function probeAudio(on) {
-  const bridge = await ensureBridge();
-  try {
-    const ok = await bridge.audioControl(!!on);
-    matrixSet(`audioControl.${on ? "on" : "off"}.ok`, !!ok);
-  } catch (e) {
-    matrixSet(`audioControl.${on ? "on" : "off"}.ok`, false);
-    matrixSet(`audioControl.${on ? "on" : "off"}.error`, String(e));
-  }
-}
-
-function filterAdvancedButtons() {
-  const query = (ui.advancedSearch.value || "").toLowerCase().trim();
-  const buttons = Array.from(document.querySelectorAll("button[data-probe]"));
-  for (const btn of buttons) {
-    const text = `${btn.textContent} ${btn.dataset.probe}`.toLowerCase();
-    btn.style.display = !query || text.includes(query) ? "" : "none";
-  }
-}
-
-ui.btnRunNextTest.addEventListener("click", runNextTest);
-ui.btnExportRun.addEventListener("click", () => {
-  exportRunFile();
+ui.btnRunTest.addEventListener("click", runTestFlow);
+ui.btnYes.addEventListener("click", () => saveResult("yes"));
+ui.btnNo.addEventListener("click", () => {
+  ui.detailsWrap.hidden = false;
+  ui.submitStatus.textContent = "Please add details, then click Submit Results to GitHub.";
+  ui.submitStatus.className = "status";
+  ui.btnSubmit.onclick = () => saveResult("no");
 });
-ui.btnSaveGitHubSettings.addEventListener("click", saveGitHubExportSettings);
-document.querySelectorAll(".result-btn").forEach((btn) => {
-  btn.addEventListener("click", () => saveRun(btn.dataset.result));
+ui.btnNotSure.addEventListener("click", () => {
+  ui.detailsWrap.hidden = false;
+  ui.submitStatus.textContent = "Please add details, then click Submit Results to GitHub.";
+  ui.submitStatus.className = "status";
+  ui.btnSubmit.onclick = () => saveResult("not-sure");
 });
 
-ui.btnGetUser.addEventListener("click", probeGetUserInfo);
-ui.btnGetDevice.addEventListener("click", probeGetDeviceInfo);
-ui.btnCreateStartup.addEventListener("click", probeCreateStartup);
-ui.btnTextUpgrade.addEventListener("click", probeTextUpgrade);
-ui.btnRebuild.addEventListener("click", probeRebuild);
-ui.btnShutdown.addEventListener("click", probeShutdown);
-ui.btnSetLS.addEventListener("click", probeSetLocalStorage);
-ui.btnGetLS.addEventListener("click", probeGetLocalStorage);
-ui.btnStartMic.addEventListener("click", () => probeAudio(true));
-ui.btnStopMic.addEventListener("click", () => probeAudio(false));
-ui.advancedSearch.addEventListener("input", filterAdvancedButtons);
+ui.btnNext.addEventListener("click", () => resetPage1(true));
+ui.btnRetry.addEventListener("click", () => resetPage1(false));
+ui.btnDebug.addEventListener("click", () => {
+  ui.debugWrap.hidden = false;
+  ui.debugPrompt.textContent = buildDebugPrompt();
+});
+ui.btnCopyPrompt.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(ui.debugPrompt.textContent);
+    ui.confirmationTitle.textContent = "Saved successfully. Debug prompt copied.";
+  } catch {
+    ui.confirmationTitle.textContent = "Saved successfully. Copy failed—please copy manually.";
+  }
+});
 
-renderNextTest();
-loadRuns();
-hydrateGitHubExportSettingsUi();
-setRunState("not started");
-log("Ready. Click 'Run Next Test' to start guided flow.");
+resetPage1(false);

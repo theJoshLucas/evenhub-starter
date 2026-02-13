@@ -23,6 +23,10 @@ const ui = {
   btnGetLS: $("btnGetLS"),
   btnStartMic: $("btnStartMic"),
   btnStopMic: $("btnStopMic"),
+  btnGenerateQr: $("btnGenerateQr"),
+  qrUrl: $("qrUrl"),
+  qrTimestamp: $("qrTimestamp"),
+  qrCode: $("qrCode"),
 };
 
 const state = {
@@ -59,6 +63,49 @@ function matrixSet(key, value) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildGitHubPagesUrl() {
+  const owner = "theJoshLucas";
+  const repo = "evenhub-starter";
+  return `https://${owner}.github.io/${repo}/index.html`;
+}
+
+function buildCacheBustedUrl() {
+  const base = buildGitHubPagesUrl();
+  const stamp = Date.now();
+  const url = new URL(base);
+  url.searchParams.set("cb", String(stamp));
+  return {
+    url: url.toString(),
+    timestamp: new Date(stamp).toISOString(),
+  };
+}
+
+function generateQrForGlassesTest() {
+  try {
+    const qrLib = window.QRCode;
+    if (!qrLib) throw new Error("QRCode library is not loaded.");
+
+    const { url, timestamp } = buildCacheBustedUrl();
+    ui.qrUrl.textContent = url;
+    ui.qrTimestamp.textContent = timestamp;
+
+    ui.qrCode.innerHTML = "";
+    new qrLib(ui.qrCode, {
+      text: url,
+      width: 220,
+      height: 220,
+      correctLevel: qrLib.CorrectLevel.M,
+    });
+
+    matrixSet("qrTest.url", url);
+    matrixSet("qrTest.timestamp", timestamp);
+    log("Generated glasses test QR:", { url, timestamp });
+  } catch (e) {
+    log("Generate QR ERROR:", String(e));
+    matrixSet("qrTest.error", String(e));
+  }
 }
 
 // ---- SDK loading (try a couple CDNs) ----
@@ -405,6 +452,8 @@ ui.btnSetLS.addEventListener("click", probeSetLocalStorage);
 ui.btnGetLS.addEventListener("click", probeGetLocalStorage);
 ui.btnStartMic.addEventListener("click", () => probeAudio(true));
 ui.btnStopMic.addEventListener("click", () => probeAudio(false));
+ui.btnGenerateQr.addEventListener("click", generateQrForGlassesTest);
 
-// Auto-boot on load (nice for QR workflow)
+// Auto-prepare a fresh QR for device testing and boot bridge probes
+generateQrForGlassesTest();
 boot();

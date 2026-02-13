@@ -38,4 +38,5 @@
 
 ## Constraints / caveats
 - Desktop browser is not enough for full verification; Even runtime bridge is required.
+- For real-device retests, generate a fresh cache-busted QR URL each run to reduce stale WebView cache effects.
 - SDK and behavior may change during pilot; treat Discord announcements as current source of truth.

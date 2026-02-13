@@ -32,6 +32,18 @@
     <span class="pill">Build: no bundler</span>
   </div>
 
+  <div class="card" style="margin:12px 0;">
+    <h2>Glasses QR Test Tool</h2>
+    <p class="muted">Generate a fresh GitHub Pages test link + QR code for real-device testing.</p>
+    <div class="row">
+      <button id="btnGenerateQr">Generate QR for Glasses Test</button>
+    </div>
+    <p class="tiny muted">Each QR is single-use because it includes a unique cache-busting value.</p>
+    <p class="tiny"><strong>URL:</strong> <span id="qrUrl">(not generated yet)</span></p>
+    <p class="tiny"><strong>Timestamp:</strong> <span id="qrTimestamp">(not generated yet)</span></p>
+    <div id="qrCode" aria-label="QR code output"></div>
+  </div>
+
   <div class="grid">
     <div class="card">
       <h2>Status</h2>
@@ -82,6 +94,7 @@
     <pre id="log"></pre>
   </div>
 
+  <script src="./vendor/qrcode.min.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

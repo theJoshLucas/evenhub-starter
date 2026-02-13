@@ -54,11 +54,23 @@ What you should see:
 3. Click **Run Hello World Demo** (recommended) or **Boot / Reconnect**.
 4. The demo will auto-try `createStartUpPageContainer()` up to 3 times with a short delay.
 
+## Glasses QR testing loop (human-in-the-loop)
+Why this exists: Even Hub WebView can cache aggressively, so scanning the same old QR may open stale code. This tool creates a fresh URL each time by appending a `cb` (cache-busting) query value.
+
+1. Click **Generate QR for Glasses Test**.
+2. Scan the new QR with the glasses flow.
+3. Observe behavior on-device (status, logs, and what appears in-glasses).
+4. Return to the page and click **Generate QR for Glasses Test** again for the next run.
+
+Important: each generated QR is effectively single-use for testing because it is tied to one timestamped URL.
+
 ## Smallest reproducible hello-world (core integration)
-1. Launch in Even runtime.
+1. Launch in Even runtime from a freshly generated QR URL.
 2. Click **Run Hello World Demo**.
 3. Wait for up to 3 startup-create attempts (about ~3-5 seconds total).
-4. Confirm `Startup page: created ✅` and `helloWorldDemo.ok: true` in the matrix panel.
+4. Check status + matrix output (`helloWorldDemo.ok` and `createStartUpPageContainer.ok`).
+
+Note: this project provides tooling to help a human validate on real hardware; it does not itself prove device validation.
 
 ## Current constraints
 - Device/runtime dependency: full validation requires Even bridge (`flutter_inappwebview`).

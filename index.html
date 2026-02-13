@@ -9,398 +9,180 @@
       color-scheme: light dark;
       --bg: Canvas;
       --fg: CanvasText;
-      --card: transparent;
       --border: color-mix(in srgb, CanvasText 12%, Canvas 88%);
+      --muted: color-mix(in srgb, CanvasText 60%, Canvas 40%);
       --ok: #0a7;
       --bad: #c21;
-      --muted: color-mix(in srgb, CanvasText 62%, Canvas 38%);
       --accent: #376dff;
     }
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      line-height: 1.45;
-      background: var(--bg);
-      color: var(--fg);
-    }
-    .app {
-      max-width: 780px;
-      margin: 0 auto;
-      padding: 20px 14px 24px;
-      display: grid;
-      gap: 20px;
-    }
-    h1, h2, h3, p { margin: 0; }
-    h1 { font-size: 1.4rem; letter-spacing: 0.01em; }
-    h2 { font-size: 1rem; margin-bottom: 6px; letter-spacing: 0.01em; }
-    h3 { font-size: 0.9rem; margin-bottom: 4px; font-weight: 600; }
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+    .app { max-width: 760px; margin: 0 auto; padding: 18px 14px 30px; display: grid; gap: 18px; }
+    .card { display: grid; gap: 10px; }
+    h1,h2,h3,p { margin: 0; }
+    h1 { font-size: 1.35rem; }
+    h2 { font-size: 1.02rem; }
     .muted { color: var(--muted); }
-    .tiny { font-size: 0.8rem; }
-    .card {
-      border: 0;
-      padding: 0;
-      display: grid;
-      gap: 8px;
-    }
-    .header-card { gap: 6px; }
+    .tiny { font-size: .82rem; }
+    .section-rule { border-top: 1px solid var(--border); padding-top: 12px; }
     .pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
-    .pill {
-      display: inline-block;
-      border: 1px solid color-mix(in srgb, var(--border) 85%, Canvas 15%);
+    .pill { border: 1px solid var(--border); border-radius: 999px; padding: 4px 9px; font-size: .74rem; }
+    .status-chip {
       border-radius: 999px;
-      padding: 4px 9px;
-      font-size: 0.75rem;
-      background: transparent;
+      border: 1px solid var(--border);
+      padding: 3px 10px;
+      font-size: .75rem;
+      width: fit-content;
     }
-    .section-rule {
-      border-top: 1px solid color-mix(in srgb, var(--border) 72%, Canvas 28%);
-      padding-top: 12px;
-    }
-
-    .row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .status-chip.running { color: #8a6100; }
+    .status-chip.success { color: var(--ok); }
+    .status-chip.failed { color: var(--bad); }
     button {
-      border: 1px solid color-mix(in srgb, var(--border) 90%, Canvas 10%);
+      border: 1px solid var(--border);
       border-radius: 999px;
-      min-height: 36px;
-      padding: 7px 12px;
+      min-height: 38px;
+      padding: 8px 13px;
       font: inherit;
-      font-size: 0.82rem;
-      font-weight: 500;
       background: transparent;
       color: inherit;
-      opacity: 0.86;
       cursor: pointer;
-      text-align: center;
     }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .primary-btn {
-      background: transparent;
-      border-color: color-mix(in srgb, var(--border) 78%, var(--accent) 22%);
+    button.primary {
+      border-color: color-mix(in srgb, var(--border) 74%, var(--accent) 26%);
+      background: color-mix(in srgb, var(--accent) 8%, Canvas 92%);
+      font-weight: 600;
     }
-
-    .step-list {
-      list-style: none;
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .next-test-grid { display: grid; gap: 8px; }
+    .checklist {
       margin: 0;
-      padding: 0;
+      padding-left: 18px;
+      display: grid;
+      gap: 5px;
+      font-size: .9rem;
+    }
+    .question-card {
+      border-left: 2px solid var(--border);
+      padding-left: 10px;
       display: grid;
       gap: 10px;
     }
-    .step-item {
-      border-left: 2px solid color-mix(in srgb, var(--border) 75%, Canvas 25%);
-      padding: 6px 0 6px 10px;
-      display: grid;
-      gap: 5px;
-      transition: opacity 180ms ease, padding 180ms ease;
-    }
-    .step-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 8px;
-    }
-    .step-status {
-      font-size: 0.72rem;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      padding: 2px 8px;
-      font-weight: 600;
-      text-transform: lowercase;
-    }
-    .step-status.not-run { color: var(--muted); }
-    .step-status.running { color: #8a6100; }
-    .step-status.success {
-      color: color-mix(in srgb, var(--ok) 72%, CanvasText 28%);
-      border-color: color-mix(in srgb, var(--ok) 24%, var(--border) 76%);
-      opacity: 0.8;
-    }
-    .step-status.failed { color: var(--bad); }
-
-    /* rule 1: completed steps shrink and quiet down */
-    .step-item:has(.step-status.success) {
-      padding-top: 4px;
-      padding-bottom: 4px;
-      opacity: 0.76;
-    }
-    .step-item:has(.step-status.success) .tiny.muted {
-      font-weight: 400;
-      color: color-mix(in srgb, var(--muted) 84%, Canvas 16%);
-    }
-
-    /* rule 7: only current step action gets emphasis */
-    .step-item .primary-btn { opacity: 0.74; }
-    .step-list:not(:has(#stepStatusQr.success)) li:nth-child(1) .primary-btn,
-    .step-list:has(#stepStatusQr.success):not(:has(#stepStatusBoot.success)) li:nth-child(2) .primary-btn,
-    .step-list:has(#stepStatusBoot.success):not(:has(#stepStatusHello.success)) li:nth-child(3) .primary-btn {
-      opacity: 1;
-      background: color-mix(in srgb, var(--accent) 8%, Canvas 92%);
-      border-color: color-mix(in srgb, var(--accent) 28%, var(--border) 72%);
-    }
-    .app:has(#stepStatusHello.success):not(:has(#stepStatusJournal.success)) #btnJournalConfirm {
-      opacity: 1;
-      background: color-mix(in srgb, var(--accent) 8%, Canvas 92%);
-      border-color: color-mix(in srgb, var(--accent) 28%, var(--border) 72%);
-    }
-
-    /* rule 2: QR demotion after success */
-    .step-item:has(#stepStatusQr.success) #qrCode,
-    .step-item:has(#stepStatusQr.success) #qrUrl,
-    .step-item:has(#stepStatusQr.success) #qrTimestamp {
-      opacity: 0.76;
-    }
-    .step-item:has(#stepStatusQr.success) #qrCode img,
-    .step-item:has(#stepStatusQr.success) #qrCode canvas {
-      max-width: 180px;
-      border-color: color-mix(in srgb, var(--border) 70%, Canvas 30%);
-      padding: 4px;
-    }
-
-    .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .status-cell {
-      border-left: 2px solid color-mix(in srgb, var(--border) 78%, Canvas 22%);
-      padding: 4px 0 4px 10px;
-      font-size: 0.8rem;
-    }
-    .ok { color: var(--ok); font-weight: 700; }
-    /* rule 3: pending defaults should be neutral, not red */
-    .status-cell .bad {
-      color: color-mix(in srgb, var(--muted) 86%, Canvas 14%);
-      font-weight: 600;
-    }
-
-    textarea, input[type="search"], select {
+    details summary { cursor: pointer; font-weight: 600; }
+    details summary::-webkit-details-marker { display: none; }
+    details summary::after { content: "▾"; float: right; color: var(--muted); }
+    details:not([open]) summary::after { content: "▸"; }
+    textarea, input[type="search"] {
       width: 100%;
-      border: 1px solid color-mix(in srgb, var(--border) 80%, Canvas 20%);
+      border: 1px solid var(--border);
       border-radius: 10px;
       padding: 9px;
+      font: inherit;
       background: transparent;
       color: inherit;
-      font: inherit;
-      font-size: 0.86rem;
     }
-
-    details summary {
-      cursor: pointer;
-      font-weight: 600;
-      list-style: none;
-      color: color-mix(in srgb, CanvasText 90%, Canvas 10%);
-    }
-    details summary::-webkit-details-marker { display: none; }
-    details summary::after {
-      content: "▾";
-      float: right;
-      color: var(--muted);
-    }
-    details:not([open]) summary::after { content: "▸"; }
-
-    /* rule 4: collapsed sections fully disappear except disclosure row */
-    .collapse-panel {
-      border-top: 1px solid color-mix(in srgb, var(--border) 75%, Canvas 25%);
-      padding-top: 8px;
-    }
-    .collapse-panel:not([open]) {
-      border-top: 0;
-      padding-top: 0;
-    }
-    .collapse-panel:not([open]) > :not(summary) {
-      display: none;
-    }
-    .collapse-panel[open] > summary { margin-bottom: 8px; }
-
-    .probe-group { margin-top: 6px; }
-    .probe-group .row { margin-top: 6px; }
-
-    /* rule 5: journal as memory */
-    .journal-shell { display: grid; gap: 10px; }
-    .journal-memory {
-      border-left: 2px solid color-mix(in srgb, var(--border) 78%, Canvas 22%);
-      padding-left: 10px;
-      opacity: 0.9;
-    }
-    .journal-summary {
-      display: grid;
-      gap: 5px;
-      font-size: 0.8rem;
-    }
-    .journal-form { display: grid; gap: 6px; }
-    .journal-form .primary-btn { opacity: 0.82; }
-    .journal-list {
-      list-style: none;
-      margin: 0;
-      padding: 0;
-      display: grid;
-      gap: 8px;
-      max-height: 240px;
-      overflow: auto;
-    }
-    .journal-item {
-      border-left: 2px solid color-mix(in srgb, var(--border) 75%, Canvas 25%);
-      padding: 5px 0 5px 10px;
-      font-size: 0.84rem;
-      opacity: 0.88;
-    }
-    .journal-meta { font-size: 0.76rem; color: var(--muted); margin-bottom: 5px; }
-
     pre {
       margin: 0;
-      border: 1px solid color-mix(in srgb, var(--border) 74%, Canvas 26%);
+      border: 1px solid var(--border);
       border-radius: 10px;
       padding: 9px;
-      background: transparent;
       white-space: pre-wrap;
-      word-break: break-word;
-      max-height: 260px;
+      max-height: 240px;
       overflow: auto;
-      font-size: 0.79rem;
+      font-size: .79rem;
     }
-    #qrCode img, #qrCode canvas {
-      width: 100%;
-      max-width: 220px;
-      border-radius: 8px;
-      border: 1px solid color-mix(in srgb, var(--border) 80%, Canvas 20%);
-      padding: 8px;
-      background: #fff;
-    }
-
-    @media (min-width: 760px) {
-      .app { padding: 18px; }
-    }
+    .collapse-panel:not([open]) > :not(summary) { display: none; }
+    .collapse-panel[open] { padding-top: 8px; border-top: 1px solid var(--border); }
+    .ok { color: var(--ok); font-weight: 700; }
+    .bad { color: var(--bad); font-weight: 700; }
+    .status-grid { display: grid; gap: 7px; font-size: .84rem; }
   </style>
 </head>
 <body>
   <main class="app">
-    <section class="card header-card">
+    <section class="card">
       <h1>Even Hub Starter Kit</h1>
-      <p class="muted">Mobile-first test helper for human hardware validation. Use this to guide repeatable checks on real devices.</p>
+      <p class="muted">Guided test runner for real glasses checks. This flow is designed so each run can be exported into the repo.</p>
       <div class="pill-row">
         <span class="pill">Static site · no build step</span>
-        <span class="pill">HTTPS recommended</span>
-        <span class="pill">Cache-busted QR flow</span>
+        <span class="pill">Guided “Next Test” flow</span>
+        <span class="pill">Repo-based run files</span>
       </div>
     </section>
 
     <section class="card section-rule">
-      <h2>Recommended Test Loop</h2>
-      <p class="tiny muted">Default path: follow each numbered step and watch status updates.</p>
-      <ol class="step-list">
-        <li class="step-item">
-          <div class="step-head"><strong>1) Generate QR (cache-busted)</strong><span id="stepStatusQr" class="step-status not-run">not run</span></div>
-          <p class="tiny muted">Create a fresh QR URL so your device loads the newest build.</p>
-          <div class="row"><button id="btnGenerateQr" class="primary-btn">Generate Fresh QR</button></div>
-          <p class="tiny"><strong>URL:</strong> <span id="qrUrl">(not generated yet)</span></p>
-          <p class="tiny"><strong>Timestamp:</strong> <span id="qrTimestamp">(not generated yet)</span></p>
-          <div id="qrCode" aria-label="QR code output"></div>
-        </li>
-        <li class="step-item">
-          <div class="step-head"><strong>2) Boot / Reconnect</strong><span id="stepStatusBoot" class="step-status not-run">not run</span></div>
-          <p class="tiny muted">Connect to bridge runtime and confirm readiness.</p>
-          <div class="row"><button id="btnBoot" class="primary-btn">Boot / Reconnect</button></div>
-        </li>
-        <li class="step-item">
-          <div class="step-head"><strong>3) Run Hello World Demo</strong><span id="stepStatusHello" class="step-status not-run">not run</span></div>
-          <p class="tiny muted">Try startup page creation up to 3 times with short delays.</p>
-          <div class="row"><button id="btnHelloWorld" class="primary-btn">Run Hello World Demo</button></div>
-        </li>
-        <li class="step-item">
-          <div class="step-head"><strong>4) Record confirmation</strong><span id="stepStatusJournal" class="step-status not-run">not run</span></div>
-          <p class="tiny muted">Save your outcome with timestamp + notes for later handoff.</p>
-        </li>
-      </ol>
+      <h2>Next Test</h2>
+      <div class="next-test-grid">
+        <p><strong id="nextTestTitle">Loading next test…</strong></p>
+        <p><strong>Goal:</strong> <span id="nextTestGoal"></span></p>
+        <div>
+          <p><strong>What to look for on glasses:</strong></p>
+          <ul id="nextTestLookFor" class="checklist"></ul>
+        </div>
+        <div class="row">
+          <button id="btnRunNextTest" class="primary">Run Next Test</button>
+          <span id="runState" class="status-chip">not started</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card section-rule" id="confirmationSection" hidden>
+      <h2>Human confirmation</h2>
+      <div class="question-card">
+        <p><strong>Did you see the expected result on the glasses?</strong></p>
+        <div class="row">
+          <button data-result="yes" class="result-btn">Yes</button>
+          <button data-result="no" class="result-btn">No</button>
+          <button data-result="not-sure" class="result-btn">Not sure</button>
+        </div>
+        <details>
+          <summary>Add optional notes</summary>
+          <textarea id="notesInput" placeholder="Optional details that will go into the run file."></textarea>
+        </details>
+        <div class="row">
+          <button id="btnExportRun" disabled>Export run file</button>
+        </div>
+        <p class="tiny muted">Commit this exported run file into <code>/testing/runs/</code>.</p>
+        <p id="lastSavedMessage" class="tiny muted"></p>
+      </div>
     </section>
 
     <section class="card section-rule">
       <p class="tiny muted">Live status snapshot</p>
       <div class="status-grid">
-        <div class="status-cell">SDK: <span id="sdkStatus" class="bad">not loaded</span></div>
-        <div class="status-cell">flutter_inappwebview: <span id="fiawvStatus" class="bad">unknown</span></div>
-        <div class="status-cell">Bridge ready: <span id="bridgeStatus" class="bad">unknown</span></div>
-        <div class="status-cell">Startup page: <span id="startupStatus" class="bad">not created</span></div>
-      </div>
-    </section>
-
-    <section class="card section-rule">
-      <h2>Memory</h2>
-      <p class="tiny muted">Entries are saved in this browser using localStorage.</p>
-      <div class="journal-shell">
-        <div class="journal-memory">
-          <p class="tiny muted">Run memory</p>
-          <div class="journal-summary" id="journalSummary">Loading summary…</div>
-        </div>
-
-        <div class="journal-form">
-          <label for="journalOutcome" class="tiny"><strong>Outcome</strong></label>
-          <select id="journalOutcome">
-            <option value="success">Success / win</option>
-            <option value="failure">Failure / blocker</option>
-          </select>
-
-          <label class="tiny" for="journalNotes"><strong>Notes</strong></label>
-          <textarea id="journalNotes" placeholder="What happened on the real device? Include anything that helps your next test run."></textarea>
-
-          <div class="row">
-            <button id="btnJournalConfirm" class="primary-btn">Record confirmation</button>
-            <button id="btnJournalReset">Reset journal</button>
-          </div>
-          <div class="row">
-            <button id="btnCopySummary">Copy Summary</button>
-            <button id="btnCopyFullReport">Copy Full Report</button>
-            <button id="btnDownloadReport">Download Report (.md)</button>
-          </div>
-        </div>
-
-        <p id="journalEmpty" class="tiny muted">No history yet.</p>
-        <ol id="journalList" class="journal-list"></ol>
+        <div>SDK: <span id="sdkStatus" class="bad">not loaded</span></div>
+        <div>flutter_inappwebview: <span id="fiawvStatus" class="bad">unknown</span></div>
+        <div>Bridge ready: <span id="bridgeStatus" class="bad">unknown</span></div>
+        <div>Startup page: <span id="startupStatus" class="bad">not created</span></div>
       </div>
     </section>
 
     <section class="card section-rule">
       <h2>Diagnostics</h2>
-      <details id="advancedPanel" class="collapse-panel">
-        <summary>Advanced probes (optional)</summary>
-        <p class="tiny muted">Collapsed by default so the main flow stays focused.</p>
-        <input id="advancedSearch" type="search" placeholder="Search advanced probes (example: audio)" />
-
-        <div class="probe-group" data-group="Bridge">
-          <h3>Bridge</h3>
-          <div class="row">
-            <button data-probe="Bridge" id="btnGetUser">getUserInfo()</button>
-            <button data-probe="Bridge" id="btnGetDevice">getDeviceInfo()</button>
-          </div>
-        </div>
-
-        <div class="probe-group" data-group="Page">
-          <h3>Page</h3>
-          <div class="row">
-            <button data-probe="Page" id="btnCreateStartup">createStartUpPageContainer()</button>
-            <button data-probe="Page" id="btnTextUpgrade">textContainerUpgrade()</button>
-            <button data-probe="Page" id="btnRebuild">rebuildPageContainer()</button>
-            <button data-probe="Page" id="btnShutdown">shutDownPageContainer()</button>
-          </div>
-        </div>
-
-        <div class="probe-group" data-group="Storage">
-          <h3>Storage</h3>
-          <div class="row">
-            <button data-probe="Storage" id="btnSetLS">setLocalStorage()</button>
-            <button data-probe="Storage" id="btnGetLS">getLocalStorage()</button>
-          </div>
-        </div>
-
-        <div class="probe-group" data-group="Audio">
-          <h3>Audio</h3>
-          <div class="row">
-            <button data-probe="Audio" id="btnStartMic">audioControl(true)</button>
-            <button data-probe="Audio" id="btnStopMic">audioControl(false)</button>
-          </div>
+      <details class="collapse-panel">
+        <summary>Diagnostics</summary>
+        <p class="tiny muted">Use only when troubleshooting. Hidden by default to keep the guided flow simple.</p>
+        <input id="advancedSearch" type="search" placeholder="Search diagnostics buttons" />
+        <div class="row">
+          <button data-probe="Bridge" id="btnGetUser">getUserInfo()</button>
+          <button data-probe="Bridge" id="btnGetDevice">getDeviceInfo()</button>
+          <button data-probe="Page" id="btnCreateStartup">createStartUpPageContainer()</button>
+          <button data-probe="Page" id="btnTextUpgrade">textContainerUpgrade()</button>
+          <button data-probe="Page" id="btnRebuild">rebuildPageContainer()</button>
+          <button data-probe="Page" id="btnShutdown">shutDownPageContainer()</button>
+          <button data-probe="Storage" id="btnSetLS">setLocalStorage()</button>
+          <button data-probe="Storage" id="btnGetLS">getLocalStorage()</button>
+          <button data-probe="Audio" id="btnStartMic">audioControl(true)</button>
+          <button data-probe="Audio" id="btnStopMic">audioControl(false)</button>
         </div>
       </details>
 
-      <details id="capabilitiesPanel" class="collapse-panel">
+      <details class="collapse-panel">
         <summary>Capabilities matrix</summary>
         <pre id="matrix">(nothing yet)</pre>
       </details>
 
-      <details id="logPanel" class="collapse-panel">
+      <details class="collapse-panel">
         <summary>Log</summary>
         <pre id="log"></pre>
       </details>

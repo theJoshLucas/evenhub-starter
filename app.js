@@ -15,6 +15,11 @@ const ui = {
   confirmationSection: $("confirmationSection"),
   notesInput: $("notesInput"),
   btnExportRun: $("btnExportRun"),
+  githubTokenInput: $("githubTokenInput"),
+  githubRepoInput: $("githubRepoInput"),
+  githubBranchInput: $("githubBranchInput"),
+  btnSaveGitHubSettings: $("btnSaveGitHubSettings"),
+  githubSettingsStatus: $("githubSettingsStatus"),
   lastSavedMessage: $("lastSavedMessage"),
   nextTestTitle: $("nextTestTitle"),
   nextTestGoal: $("nextTestGoal"),
@@ -52,6 +57,7 @@ const state = {
 };
 
 const RUN_STORAGE_KEY = "starterKit.testingRuns.v1";
+const GITHUB_EXPORT_SETTINGS_KEY = "starterKit.githubExportSettings.v1";
 
 function isoNow() {
   return new Date().toISOString();
@@ -90,6 +96,114 @@ function loadRuns() {
     state.runs = [];
     log("Run history load error:", String(e));
   }
+}
+
+
+function loadGitHubExportSettings() {
+  try {
+    const raw = localStorage.getItem(GITHUB_EXPORT_SETTINGS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!parsed) return null;
+
+    const repo = typeof parsed.repo === "string" ? parsed.repo.trim() : "";
+    const branch = typeof parsed.branch === "string" ? parsed.branch.trim() : "main";
+    const token = typeof parsed.token === "string" ? parsed.token.trim() : "";
+
+    if (!repo || !token) return null;
+    return { repo, branch: branch || "main", token };
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveGitHubExportSettings() {
+  const repo = (ui.githubRepoInput.value || "").trim();
+  const branch = (ui.githubBranchInput.value || "main").trim() || "main";
+  const token = (ui.githubTokenInput.value || "").trim();
+
+  if (!repo || !token) {
+    ui.githubSettingsStatus.textContent = "Missing repo or token. Auto-commit still off.";
+    return;
+  }
+
+  const settings = { repo, branch, token };
+  localStorage.setItem(GITHUB_EXPORT_SETTINGS_KEY, JSON.stringify(settings));
+  ui.githubSettingsStatus.textContent = `Auto-commit ready for ${repo} (${branch}).`;
+  ui.githubTokenInput.value = "";
+}
+
+function hydrateGitHubExportSettingsUi() {
+  const settings = loadGitHubExportSettings();
+  if (!settings) return;
+
+  ui.githubRepoInput.value = settings.repo;
+  ui.githubBranchInput.value = settings.branch;
+  ui.githubSettingsStatus.textContent = `Auto-commit ready for ${settings.repo} (${settings.branch}).`;
+}
+
+function parseOwnerRepo(repoValue) {
+  const [owner, repo] = repoValue.split("/");
+  if (!owner || !repo) return null;
+  return { owner, repo };
+}
+
+async function getFileSha(owner, repo, branch, path, token) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(branch)}`;
+  const resp = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+    },
+  });
+
+  if (resp.status === 404) return null;
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Failed checking existing file (${resp.status}): ${text}`);
+  }
+
+  const data = await resp.json();
+  return data.sha || null;
+}
+
+async function commitRunToGitHub(filename, content) {
+  const settings = loadGitHubExportSettings();
+  if (!settings) return false;
+
+  const ownerRepo = parseOwnerRepo(settings.repo);
+  if (!ownerRepo) throw new Error("GitHub repo format must be owner/repo.");
+
+  const path = `testing/runs/${filename}`;
+  const sha = await getFileSha(ownerRepo.owner, ownerRepo.repo, settings.branch, path, settings.token);
+
+  const url = `https://api.github.com/repos/${ownerRepo.owner}/${ownerRepo.repo}/contents/${path}`;
+  const payload = {
+    message: `Add test run ${filename}`,
+    content: btoa(unescape(encodeURIComponent(content))),
+    branch: settings.branch,
+  };
+  if (sha) payload.sha = sha;
+
+  const resp = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${settings.token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`GitHub commit failed (${resp.status}): ${text}`);
+  }
+
+  return true;
+}
+
+function getLiveNotes() {
+  return (ui.notesInput.value || "").trim();
 }
 
 function setRunState(text, className = "") {
@@ -300,7 +414,7 @@ function saveRun(answer) {
     ...state.pendingRun,
     answer,
     result: normalizedResult,
-    notes: (ui.notesInput.value || "").trim(),
+    notes: getLiveNotes(),
     savedAt: isoNow(),
   };
 
@@ -318,11 +432,26 @@ function saveRun(answer) {
   log("Run saved locally:", run);
 }
 
-function exportRunFile() {
+async function exportRunFile() {
   if (!state.pendingRun?.exportFile) return;
+
+  state.pendingRun.notes = getLiveNotes();
   const content = buildRunMarkdown(state.pendingRun);
+
+  try {
+    const committed = await commitRunToGitHub(state.pendingRun.exportFile, content);
+    if (committed) {
+      ui.lastSavedMessage.textContent = `Committed to repo: testing/runs/${state.pendingRun.exportFile}`;
+      log("Committed run file to GitHub:", state.pendingRun.exportFile);
+      return;
+    }
+  } catch (e) {
+    log("Auto-commit failed, falling back to download:", String(e));
+    ui.lastSavedMessage.textContent = `Auto-commit failed (${String(e)}). Downloading file instead.`;
+  }
+
   createDownload(state.pendingRun.exportFile, content);
-  log("Exported run file:", state.pendingRun.exportFile);
+  log("Exported run file as download:", state.pendingRun.exportFile);
 }
 
 async function probeGetUserInfo() {
@@ -438,7 +567,10 @@ function filterAdvancedButtons() {
 }
 
 ui.btnRunNextTest.addEventListener("click", runNextTest);
-ui.btnExportRun.addEventListener("click", exportRunFile);
+ui.btnExportRun.addEventListener("click", () => {
+  exportRunFile();
+});
+ui.btnSaveGitHubSettings.addEventListener("click", saveGitHubExportSettings);
 document.querySelectorAll(".result-btn").forEach((btn) => {
   btn.addEventListener("click", () => saveRun(btn.dataset.result));
 });
@@ -457,5 +589,6 @@ ui.advancedSearch.addEventListener("input", filterAdvancedButtons);
 
 renderNextTest();
 loadRuns();
+hydrateGitHubExportSettingsUi();
 setRunState("not started");
 log("Ready. Click 'Run Next Test' to start guided flow.");

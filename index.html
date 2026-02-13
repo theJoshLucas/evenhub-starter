@@ -142,7 +142,19 @@
         <div class="row">
           <button id="btnExportRun" disabled>Export run file</button>
         </div>
-        <p class="tiny muted">Commit this exported run file into <code>/testing/runs/</code>.</p>
+        <details>
+          <summary>Auto-commit to GitHub (optional)</summary>
+          <p class="tiny muted">If enabled, Export run file will create or update <code>testing/runs/&lt;filename&gt;</code> directly in your GitHub repo.</p>
+          <label class="tiny" for="githubTokenInput">GitHub token (needs <code>repo</code> scope)</label>
+          <input id="githubTokenInput" type="password" placeholder="ghp_..." autocomplete="off" />
+          <div class="row">
+            <input id="githubRepoInput" placeholder="owner/repo" value="theJoshLucas/evenhub-starter" />
+            <input id="githubBranchInput" placeholder="branch" value="main" />
+          </div>
+          <button id="btnSaveGitHubSettings" type="button">Save GitHub settings</button>
+          <p class="tiny muted" id="githubSettingsStatus">Auto-commit is off until settings are saved.</p>
+        </details>
+        <p class="tiny muted">If auto-commit is not set up, this button falls back to a local download.</p>
         <p id="lastSavedMessage" class="tiny muted"></p>
       </div>
     </section>

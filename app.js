@@ -33,6 +33,7 @@ const ui = {
   journalNotes: $("journalNotes"),
   btnJournalConfirm: $("btnJournalConfirm"),
   btnJournalReset: $("btnJournalReset"),
+  btnCopyReport: $("btnCopyReport"),
   journalList: $("journalList"),
   journalEmpty: $("journalEmpty"),
 };
@@ -173,6 +174,86 @@ function resetJournal() {
   saveJournal();
   renderJournal();
   log("Developer Journal reset.");
+}
+
+function getStepStatusLabel(el) {
+  return (el?.textContent || "not run").trim().toLowerCase();
+}
+
+function getRecentLogs(limit = 40) {
+  const lines = (ui.log.textContent || "")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter(Boolean);
+  return lines.slice(-limit);
+}
+
+function buildMarkdownTestReport() {
+  const generatedAt = new Date().toISOString();
+  const testedUrl = state.matrix["qrTest.url"] || buildGitHubPagesUrl();
+  const testedAt = state.matrix["qrTest.timestamp"] || "(not generated yet)";
+  const testSummary = {
+    generatedQr: getStepStatusLabel(ui.stepStatusQr),
+    bridgeConnection: getStepStatusLabel(ui.stepStatusBoot),
+    helloWorldDemo: getStepStatusLabel(ui.stepStatusHello),
+    bridgeReady: !!state.matrix["bridge.ready"],
+    startupPageCreated: !!state.matrix["createStartUpPageContainer.ok"],
+    helloWorldConfirmed: !!state.matrix["helloWorldDemo.ok"],
+    latestOutcomeSummary: getCurrentOutcomeSummary(),
+  };
+
+  const recentLogs = getRecentLogs();
+  const journalBlock = state.journal.length
+    ? JSON.stringify(state.journal, null, 2)
+    : "[]";
+  const matrixBlock = Object.keys(state.matrix).length
+    ? JSON.stringify(state.matrix, null, 2)
+    : "{}";
+  const logBlock = recentLogs.length ? recentLogs.join("\n") : "(no logs yet)";
+
+  return [
+    "# Even Hub Test Report",
+    "",
+    "## Context",
+    `- Report generated: ${generatedAt}`,
+    `- URL tested: ${testedUrl}`,
+    `- URL timestamp: ${testedAt}`,
+    "",
+    "## Current Test Results",
+    "```json",
+    JSON.stringify(testSummary, null, 2),
+    "```",
+    "",
+    "## Capabilities Matrix Snapshot",
+    "```json",
+    matrixBlock,
+    "```",
+    "",
+    "## Persistent Journal State",
+    "```json",
+    journalBlock,
+    "```",
+    "",
+    "## Recent Logs",
+    "```text",
+    logBlock,
+    "```",
+    "",
+    "---",
+    "Paste this report directly into Codex or a GitHub issue.",
+  ].join("\n");
+}
+
+async function copyTestReport() {
+  const report = buildMarkdownTestReport();
+
+  try {
+    await navigator.clipboard.writeText(report);
+    log("Copy Test Report: markdown report copied to clipboard ✅");
+  } catch (e) {
+    log("Copy Test Report clipboard write failed; opening fallback prompt:", String(e));
+    window.prompt("Copy the markdown report below:", report);
+  }
 }
 
 function buildGitHubPagesUrl() {
@@ -572,6 +653,7 @@ ui.btnStopMic.addEventListener("click", () => probeAudio(false));
 ui.btnGenerateQr.addEventListener("click", generateQrForGlassesTest);
 ui.btnJournalConfirm.addEventListener("click", recordConfirmedSuccess);
 ui.btnJournalReset.addEventListener("click", resetJournal);
+ui.btnCopyReport.addEventListener("click", copyTestReport);
 
 // Initialize testing step indicators and auto-prepare first run
 resetTestingSteps();

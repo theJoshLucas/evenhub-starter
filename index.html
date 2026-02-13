@@ -2,206 +2,148 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Even Hub Starter Kit</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Even Hub Test Wizard</title>
   <style>
     :root {
-      color-scheme: light dark;
-      --bg: Canvas;
-      --fg: CanvasText;
-      --border: color-mix(in srgb, CanvasText 12%, Canvas 88%);
-      --muted: color-mix(in srgb, CanvasText 60%, Canvas 40%);
-      --ok: #0a7;
-      --bad: #c21;
-      --accent: #376dff;
+      --bg: #f4f5f7;
+      --panel: rgba(255, 255, 255, 0.82);
+      --text: #141518;
+      --muted: #667085;
+      --line: #d9dde4;
+      --accent: #1e6bff;
+      --accent-soft: #e9f0ff;
+      --success: #0f9d58;
+      --danger: #b42318;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: var(--bg); color: var(--fg); }
-    .app { max-width: 760px; margin: 0 auto; padding: 18px 14px 30px; display: grid; gap: 18px; }
-    .card { display: grid; gap: 10px; }
-    h1,h2,h3,p { margin: 0; }
-    h1 { font-size: 1.35rem; }
-    h2 { font-size: 1.02rem; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "SF Pro Text", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background: radial-gradient(1200px 500px at 20% -10%, #e5ebff 0%, transparent 60%), var(--bg);
+      padding: 32px 16px;
+    }
+    .shell {
+      max-width: 820px;
+      margin: 0 auto;
+      background: var(--panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.65);
+      border-radius: 28px;
+      padding: 28px;
+      box-shadow: 0 12px 48px rgba(15, 23, 42, 0.08);
+    }
+    .page { display: grid; gap: 18px; }
+    [hidden] { display: none !important; }
+    h1, h2, p { margin: 0; }
+    h1 { font-size: 1.45rem; }
+    h2 { font-size: 1.08rem; }
     .muted { color: var(--muted); }
-    .tiny { font-size: .82rem; }
-    .section-rule { border-top: 1px solid var(--border); padding-top: 12px; }
-    .pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
-    .pill { border: 1px solid var(--border); border-radius: 999px; padding: 4px 9px; font-size: .74rem; }
-    .status-chip {
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      padding: 3px 10px;
-      font-size: .75rem;
-      width: fit-content;
+    .code-viewer {
+      background: #050806;
+      color: #63ff86;
+      border: 1px solid #102117;
+      border-radius: 16px;
+      padding: 16px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      box-shadow: inset 0 0 0 1px rgba(99, 255, 134, 0.05);
     }
-    .status-chip.running { color: #8a6100; }
-    .status-chip.success { color: var(--ok); }
-    .status-chip.failed { color: var(--bad); }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 10px; }
     button {
-      border: 1px solid var(--border);
+      border: 1px solid var(--line);
+      background: #fff;
       border-radius: 999px;
-      min-height: 38px;
-      padding: 8px 13px;
+      padding: 10px 16px;
       font: inherit;
-      background: transparent;
-      color: inherit;
       cursor: pointer;
+      min-height: 42px;
     }
-    button.primary {
-      border-color: color-mix(in srgb, var(--border) 74%, var(--accent) 26%);
-      background: color-mix(in srgb, var(--accent) 8%, Canvas 92%);
+    .primary {
+      border-color: #c9d9ff;
+      background: linear-gradient(180deg, #fff 0%, var(--accent-soft) 100%);
+      color: #1140a3;
       font-weight: 600;
     }
-    button:disabled { opacity: .5; cursor: not-allowed; }
-    .row { display: flex; flex-wrap: wrap; gap: 8px; }
-    .next-test-grid { display: grid; gap: 8px; }
-    .checklist {
-      margin: 0;
-      padding-left: 18px;
-      display: grid;
-      gap: 5px;
-      font-size: .9rem;
-    }
-    .question-card {
-      border-left: 2px solid var(--border);
-      padding-left: 10px;
-      display: grid;
-      gap: 10px;
-    }
-    details summary { cursor: pointer; font-weight: 600; }
-    details summary::-webkit-details-marker { display: none; }
-    details summary::after { content: "▾"; float: right; color: var(--muted); }
-    details:not([open]) summary::after { content: "▸"; }
-    textarea, input[type="search"] {
+    .yes { border-color: #b7ebcc; color: #0f7a46; }
+    .no { border-color: #f3c3be; color: #a0251b; }
+    textarea {
       width: 100%;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 9px;
+      min-height: 160px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
       font: inherit;
-      background: transparent;
-      color: inherit;
+      resize: vertical;
+      background: #fff;
     }
+    .status { color: var(--muted); font-size: 0.95rem; }
+    .status.ok { color: var(--success); }
+    .status.err { color: var(--danger); }
     pre {
-      margin: 0;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 9px;
-      white-space: pre-wrap;
-      max-height: 240px;
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 14px;
       overflow: auto;
-      font-size: .79rem;
+      margin: 0;
+      white-space: pre-wrap;
     }
-    .collapse-panel:not([open]) > :not(summary) { display: none; }
-    .collapse-panel[open] { padding-top: 8px; border-top: 1px solid var(--border); }
-    .ok { color: var(--ok); font-weight: 700; }
-    .bad { color: var(--bad); font-weight: 700; }
-    .status-grid { display: grid; gap: 7px; font-size: .84rem; }
   </style>
 </head>
 <body>
-  <main class="app">
-    <section class="card">
-      <h1>Even Hub Starter Kit</h1>
-      <p class="muted">Guided test runner for real glasses checks. This flow is designed so each run can be exported into the repo.</p>
-      <div class="pill-row">
-        <span class="pill">Static site · no build step</span>
-        <span class="pill">Guided “Next Test” flow</span>
-        <span class="pill">Repo-based run files</span>
+  <main class="shell">
+    <section id="page1" class="page">
+      <h1 id="testTitle">Test #1: Loading…</h1>
+      <p><strong>Goal:</strong> <span id="testGoal"></span></p>
+      <div>
+        <h2>What to look for on the glasses:</h2>
+        <div id="lookForViewer" class="code-viewer"></div>
       </div>
+      <div class="btn-row">
+        <button id="btnRunTest" class="primary">Run Test</button>
+      </div>
+      <p id="runStatus" class="status"></p>
     </section>
 
-    <section class="card section-rule">
-      <h2>Next Test</h2>
-      <div class="next-test-grid">
-        <p><strong id="nextTestTitle">Loading next test…</strong></p>
-        <p><strong>Goal:</strong> <span id="nextTestGoal"></span></p>
-        <div>
-          <p><strong>What to look for on glasses:</strong></p>
-          <ul id="nextTestLookFor" class="checklist"></ul>
-        </div>
-        <div class="row">
-          <button id="btnRunNextTest" class="primary">Run Next Test</button>
-          <span id="runState" class="status-chip">not started</span>
+    <section id="page2" class="page" hidden>
+      <h1>Did you see the expected result on the glasses?</h1>
+      <div class="btn-row">
+        <button id="btnYes" class="yes">Yes</button>
+        <button id="btnNo" class="no">No</button>
+        <button id="btnNotSure">Not Sure</button>
+      </div>
+      <div id="detailsWrap" hidden>
+        <p class="muted">Please explain what you experienced.</p>
+        <textarea id="notesInput" placeholder="Describe what happened on the glasses (what you expected vs what you saw)."></textarea>
+        <div class="btn-row">
+          <button id="btnSubmit" class="primary">Submit Results to GitHub</button>
         </div>
       </div>
+      <p id="submitStatus" class="status"></p>
     </section>
 
-    <section class="card section-rule" id="confirmationSection" hidden>
-      <h2>Human confirmation</h2>
-      <div class="question-card">
-        <p><strong>Did you see the expected result on the glasses?</strong></p>
-        <div class="row">
-          <button data-result="yes" class="result-btn">Yes</button>
-          <button data-result="no" class="result-btn">No</button>
-          <button data-result="not-sure" class="result-btn">Not sure</button>
-        </div>
-        <details>
-          <summary>Add optional notes</summary>
-          <textarea id="notesInput" placeholder="Optional details that will go into the run file."></textarea>
-        </details>
-        <div class="row">
-          <button id="btnExportRun" disabled>Export run file</button>
-        </div>
-        <details>
-          <summary>Auto-commit to GitHub (optional)</summary>
-          <p class="tiny muted">If enabled, Export run file will create or update <code>testing/runs/&lt;filename&gt;</code> directly in your GitHub repo.</p>
-          <label class="tiny" for="githubTokenInput">GitHub token (needs <code>repo</code> scope)</label>
-          <input id="githubTokenInput" type="password" placeholder="ghp_..." autocomplete="off" />
-          <div class="row">
-            <input id="githubRepoInput" placeholder="owner/repo" value="theJoshLucas/evenhub-starter" />
-            <input id="githubBranchInput" placeholder="branch" value="main" />
-          </div>
-          <button id="btnSaveGitHubSettings" type="button">Save GitHub settings</button>
-          <p class="tiny muted" id="githubSettingsStatus">Auto-commit is off until settings are saved.</p>
-        </details>
-        <p class="tiny muted">If auto-commit is not set up, this button falls back to a local download.</p>
-        <p id="lastSavedMessage" class="tiny muted"></p>
+    <section id="page3" class="page" hidden>
+      <h1 id="confirmationTitle">Saved successfully.</h1>
+      <p>What would you like to do next?</p>
+      <div class="btn-row">
+        <button id="btnNext" class="primary">Run the next test</button>
+        <button id="btnDebug">Debug</button>
+        <button id="btnRetry">Retry</button>
       </div>
-    </section>
-
-    <section class="card section-rule">
-      <p class="tiny muted">Live status snapshot</p>
-      <div class="status-grid">
-        <div>SDK: <span id="sdkStatus" class="bad">not loaded</span></div>
-        <div>flutter_inappwebview: <span id="fiawvStatus" class="bad">unknown</span></div>
-        <div>Bridge ready: <span id="bridgeStatus" class="bad">unknown</span></div>
-        <div>Startup page: <span id="startupStatus" class="bad">not created</span></div>
-      </div>
-    </section>
-
-    <section class="card section-rule">
-      <h2>Diagnostics</h2>
-      <details class="collapse-panel">
-        <summary>Diagnostics</summary>
-        <p class="tiny muted">Use only when troubleshooting. Hidden by default to keep the guided flow simple.</p>
-        <input id="advancedSearch" type="search" placeholder="Search diagnostics buttons" />
-        <div class="row">
-          <button data-probe="Bridge" id="btnGetUser">getUserInfo()</button>
-          <button data-probe="Bridge" id="btnGetDevice">getDeviceInfo()</button>
-          <button data-probe="Page" id="btnCreateStartup">createStartUpPageContainer()</button>
-          <button data-probe="Page" id="btnTextUpgrade">textContainerUpgrade()</button>
-          <button data-probe="Page" id="btnRebuild">rebuildPageContainer()</button>
-          <button data-probe="Page" id="btnShutdown">shutDownPageContainer()</button>
-          <button data-probe="Storage" id="btnSetLS">setLocalStorage()</button>
-          <button data-probe="Storage" id="btnGetLS">getLocalStorage()</button>
-          <button data-probe="Audio" id="btnStartMic">audioControl(true)</button>
-          <button data-probe="Audio" id="btnStopMic">audioControl(false)</button>
+      <div id="debugWrap" hidden class="page">
+        <h2>Debug prompt (copy and paste into Codex/AI agent)</h2>
+        <pre id="debugPrompt"></pre>
+        <div class="btn-row">
+          <button id="btnCopyPrompt" class="primary">Copy Prompt</button>
         </div>
-      </details>
-
-      <details class="collapse-panel">
-        <summary>Capabilities matrix</summary>
-        <pre id="matrix">(nothing yet)</pre>
-      </details>
-
-      <details class="collapse-panel">
-        <summary>Log</summary>
-        <pre id="log"></pre>
-      </details>
+      </div>
     </section>
   </main>
 
-  <script src="./vendor/qrcode.min.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

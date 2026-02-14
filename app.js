@@ -35,7 +35,7 @@ const ui = {
 
 const GITHUB_EXPORT_SETTINGS_KEY = "starterKit.githubExportSettings.v1";
 const TEST_COUNTER_KEY = "starterKit.testCounter.v1";
-const STARTUP_CLEAR_TEXT = "[cleared]";
+const STARTUP_CLEAR_TEXT = " ";
 
 const TESTS = [
   {
@@ -438,7 +438,7 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 80,
             containerID: 1,
-            containerName: "stability-a",
+            containerName: "multi-a",
             content: firstPass,
           },
           {
@@ -447,7 +447,7 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 40,
             containerID: 2,
-            containerName: "stability-b",
+            containerName: "multi-b",
             content: STARTUP_CLEAR_TEXT,
           },
         ],
@@ -462,7 +462,7 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 80,
             containerID: 1,
-            containerName: "stability-a",
+            containerName: "multi-a",
             content: secondPass,
           },
           {
@@ -471,7 +471,7 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 40,
             containerID: 2,
-            containerName: "stability-b",
+            containerName: "multi-b",
             content: STARTUP_CLEAR_TEXT,
           },
         ],
@@ -483,8 +483,8 @@ async function runTestById(test, expectedText) {
         lookFor: [secondPass],
         layoutHint: "Expected layout: only one visible line from this test. Previous Block A/Block B text should be replaced.",
         statusMessage: startupCreated
-          ? "Sent two updates in sequence with retry. Confirm the latest text replaced older multi-container text."
-          : "At least one update returned an error code. Continue with your observation.",
+          ? "Sent two updates in sequence. Confirm both old Block A/Block B lines were replaced."
+          : `At least one update returned an error code (pass1=${runOne}, pass2=${runTwo}). Continue with your observation.`,
       };
     }
     case "intentional-bad-payload": {

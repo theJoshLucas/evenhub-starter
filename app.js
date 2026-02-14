@@ -12,6 +12,8 @@ const ui = {
   testDiffFromPrev: $("testDiffFromPrev"),
   lookForViewer: $("lookForViewer"),
   lookForViewerPage2: $("lookForViewerPage2"),
+  expectedLayoutPage1: $("expectedLayoutPage1"),
+  expectedLayoutPage2: $("expectedLayoutPage2"),
   btnPrevTest: $("btnPrevTest"),
   btnRunTest: $("btnRunTest"),
   runStatus: $("runStatus"),
@@ -243,6 +245,7 @@ function buildRunMarkdown(run) {
     "",
     "## Expected on glasses",
     ...run.lookFor.map((line) => `- ${line}`),
+    ...(run.layoutHint ? ["", "## Expected layout", run.layoutHint] : []),
     "",
     "## Notes",
     run.notes || "(none)",
@@ -321,6 +324,27 @@ function renderExpectedLines(lines) {
   return Array.isArray(lines) ? lines.join("\n") : String(lines || "");
 }
 
+function getPreviewForTest(test, expectedText) {
+  if (test.id === "startup-multi-container") {
+    return {
+      lines: [expectedText, `Block B @ ${isoNow()}`],
+      layoutHint: "Expected layout: Block A then Block B, with no intentionally blank spacer lines between them.",
+    };
+  }
+
+  if (test.id === "rerun-update-stability") {
+    return {
+      lines: [`${expectedText} (2/2)`],
+      layoutHint: "Expected layout: only one visible line from this test. Previous Block A/Block B text should be replaced.",
+    };
+  }
+
+  return {
+    lines: [expectedText],
+    layoutHint: "",
+  };
+}
+
 async function runTestById(test, expectedText) {
   switch (test.id) {
     case "bridge-availability-check": {
@@ -393,8 +417,8 @@ async function runTestById(test, expectedText) {
         lookFor: [
           expectedText,
           secondLine,
-          "Expected layout: Block A then Block B, with no intentionally blank spacer lines between them.",
         ],
+        layoutHint: "Expected layout: Block A then Block B, with no intentionally blank spacer lines between them.",
         statusMessage: startupCreated
           ? "Two startup blocks sent. Confirm both are visible (wrapping may vary by device/font)."
           : "Multi-container test returned an error code. Continue with your observation.",
@@ -455,10 +479,8 @@ async function runTestById(test, expectedText) {
       const startupCreated = runOne && runTwo;
       return {
         startupCreated,
-        lookFor: [
-          secondPass,
-          "Expected layout: only one visible line from this test. Previous Block A/Block B text should be replaced.",
-        ],
+        lookFor: [secondPass],
+        layoutHint: "Expected layout: only one visible line from this test. Previous Block A/Block B text should be replaced.",
         statusMessage: startupCreated
           ? "Sent two updates in sequence. Confirm the latest text replaced older multi-container text."
           : "At least one update returned an error code. Continue with your observation.",
@@ -519,18 +541,25 @@ async function runTestById(test, expectedText) {
 
 async function runTestFlow() {
   const test = state.currentTest;
-  ui.lookForViewerPage2.textContent = renderExpectedLines([state.expectedText]);
+  const preview = getPreviewForTest(test, state.expectedText);
+  ui.lookForViewerPage2.textContent = renderExpectedLines(preview.lines);
+  ui.expectedLayoutPage2.textContent = preview.layoutHint;
+  ui.expectedLayoutPage2.hidden = !preview.layoutHint;
   ui.runStatus.textContent = "Running test…";
   ui.runStatus.className = "status";
   ui.btnRunTest.disabled = true;
 
   let startupCreated = false;
-  let lookFor = [state.expectedText];
+  let lookFor = preview.lines;
+  let layoutHint = preview.layoutHint;
   try {
     const result = await runTestById(test, state.expectedText);
     startupCreated = result.startupCreated;
     lookFor = result.lookFor;
+    layoutHint = result.layoutHint || "";
     ui.lookForViewerPage2.textContent = renderExpectedLines(lookFor);
+    ui.expectedLayoutPage2.textContent = layoutHint;
+    ui.expectedLayoutPage2.hidden = !layoutHint;
     ui.runStatus.textContent = result.statusMessage;
   } catch (error) {
     ui.runStatus.textContent = `Automation warning: ${String(error)}`;
@@ -544,6 +573,7 @@ async function runTestFlow() {
     testTitle: test.title,
     goal: test.goal,
     lookFor,
+    layoutHint,
     runAt: isoNow(),
     startupCreated,
     answer: "",
@@ -629,8 +659,14 @@ function resetPage1(advanceCounter) {
   ui.testApiMeaning.textContent = state.currentTest.plainMeaning;
   ui.testUnlocks.textContent = state.currentTest.unlocks;
   ui.testDiffFromPrev.textContent = state.currentTest.differsFromPrevious;
-  ui.lookForViewer.textContent = renderExpectedLines([state.expectedText]);
-  ui.lookForViewerPage2.textContent = renderExpectedLines([state.expectedText]);
+  const preview = getPreviewForTest(state.currentTest, state.expectedText);
+  ui.lookForViewer.textContent = renderExpectedLines(preview.lines);
+  ui.expectedLayoutPage1.textContent = preview.layoutHint;
+  ui.expectedLayoutPage1.hidden = !preview.layoutHint;
+
+  ui.lookForViewerPage2.textContent = renderExpectedLines(preview.lines);
+  ui.expectedLayoutPage2.textContent = preview.layoutHint;
+  ui.expectedLayoutPage2.hidden = !preview.layoutHint;
 
   ui.runStatus.textContent = "";
   ui.runStatus.className = "status";

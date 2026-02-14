@@ -50,12 +50,21 @@
       border: 1px solid #102117;
       border-radius: 16px;
       padding: 14px;
+      width: 100%;
+      max-width: 100%;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       font-size: 0.9rem;
       line-height: 1.35;
-      white-space: pre;
-      overflow: auto;
+      white-space: pre-wrap;
+      overflow-x: auto;
+      overflow-y: auto;
+      word-break: break-word;
       box-shadow: inset 0 0 0 1px rgba(99, 255, 134, 0.05);
+    }
+    .expected-layout-note {
+      margin-top: 10px;
+      color: #344054;
+      font-size: 0.95rem;
     }
     .btn-row { display: flex; flex-wrap: wrap; gap: 10px; }
     .lookfor-block {
@@ -183,6 +192,7 @@
       <div class="lookfor-block">
         <h2>What to look for on the glasses:</h2>
         <div id="lookForViewer" class="code-viewer"></div>
+        <p id="expectedLayoutPage1" class="expected-layout-note" hidden></p>
       </div>
       <div class="btn-row">
         <button id="btnPrevTest" class="btn-flat-white">Go to Previous Test</button>
@@ -196,6 +206,7 @@
       <div class="lookfor-block">
         <h2>Expected result shown in this run:</h2>
         <div id="lookForViewerPage2" class="code-viewer"></div>
+        <p id="expectedLayoutPage2" class="expected-layout-note" hidden></p>
       </div>
       <div class="btn-row">
         <button id="btnYes" class="yes">Yes</button>

@@ -17,6 +17,8 @@ const ui = {
   btnPrevTest: $("btnPrevTest"),
   btnRunTest: $("btnRunTest"),
   runStatus: $("runStatus"),
+  buildStatus: $("buildStatus"),
+  btnRefreshBuild: $("btnRefreshBuild"),
   btnYes: $("btnYes"),
   btnNo: $("btnNo"),
   btnNotSure: $("btnNotSure"),
@@ -35,8 +37,7 @@ const ui = {
 
 const GITHUB_EXPORT_SETTINGS_KEY = "starterKit.githubExportSettings.v1";
 const TEST_COUNTER_KEY = "starterKit.testCounter.v1";
-const STARTUP_CLEAR_TEXT = " ";
-const APP_DIAGNOSTIC_TAG = "eb476dd";
+const APP_DIAGNOSTIC_TAG = "diag-v4-auto-build-freshness-gate";
 
 const TESTS = [
   {
@@ -122,6 +123,13 @@ const state = {
   lastRunStatusMessage: "",
   lastAutomationError: "",
   githubRecentRuns: [],
+  buildCheck: {
+    loadedTag: APP_DIAGNOSTIC_TAG,
+    latestTag: "",
+    isFresh: true,
+    reason: "Not checked yet",
+    checkedAt: "",
+  },
 };
 
 function isoNow() {
@@ -296,6 +304,95 @@ function summarizePayload(payloadConfig) {
   };
 }
 
+function setBuildStatusUI() {
+  const check = state.buildCheck;
+  ui.buildStatus.hidden = false;
+
+  if (check.isFresh) {
+    ui.buildStatus.textContent = `Build check OK. Running tag: ${check.loadedTag}.`;
+    ui.buildStatus.className = "status ok";
+    ui.btnRefreshBuild.hidden = true;
+    ui.btnRunTest.disabled = false;
+    return;
+  }
+
+  ui.buildStatus.textContent = `This page is using an old cached build (${check.loadedTag}). Latest is ${check.latestTag || "unknown"}. Tap refresh to load latest before testing.`;
+  ui.buildStatus.className = "status err";
+  ui.btnRefreshBuild.hidden = false;
+  ui.btnRunTest.disabled = true;
+}
+
+function extractDiagnosticTag(sourceText) {
+  const match = sourceText.match(/const APP_DIAGNOSTIC_TAG = "([^"]+)";/);
+  return match?.[1] || "";
+}
+
+async function checkBuildFreshness() {
+  const cacheBust = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const url = `./app.js?fresh=${encodeURIComponent(cacheBust)}`;
+
+  try {
+    const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) {
+      state.buildCheck = {
+        ...state.buildCheck,
+        latestTag: "",
+        isFresh: true,
+        reason: `Skipped strict check: unable to fetch latest app.js (${resp.status}).`,
+        checkedAt: isoNow(),
+      };
+      addDiagnostic("build.check", state.buildCheck);
+      setBuildStatusUI();
+      return state.buildCheck;
+    }
+
+    const text = await resp.text();
+    const latestTag = extractDiagnosticTag(text);
+    const loadedTag = APP_DIAGNOSTIC_TAG;
+    const isFresh = !!latestTag && latestTag === loadedTag;
+
+    state.buildCheck = {
+      loadedTag,
+      latestTag,
+      isFresh,
+      reason: isFresh
+        ? "Loaded build matches latest app.js."
+        : "Loaded build is stale compared to latest app.js.",
+      checkedAt: isoNow(),
+    };
+    addDiagnostic("build.check", state.buildCheck);
+  } catch (error) {
+    state.buildCheck = {
+      ...state.buildCheck,
+      latestTag: "",
+      isFresh: true,
+      reason: `Skipped strict check due to network/runtime error: ${String(error)}`,
+      checkedAt: isoNow(),
+    };
+    addDiagnostic("build.check", state.buildCheck);
+  }
+
+  setBuildStatusUI();
+  return state.buildCheck;
+}
+
+function buildRefreshUrl() {
+  const next = new URL(window.location.href);
+  next.searchParams.set("fresh", Date.now().toString());
+  return next.toString();
+}
+
+function buildFingerprintLines(run) {
+  const check = run?.buildCheck || state.buildCheck;
+  return [
+    `- app_diagnostic_tag: ${run?.appDiagnosticTag || APP_DIAGNOSTIC_TAG}`,
+    `- latest_app_js_tag: ${check.latestTag || "unknown"}`,
+    `- build_is_fresh: ${check.isFresh}`,
+    `- build_check_reason: ${check.reason || "(none)"}`,
+    "- rerun_strategy: single-container (containerTotalNum=1)",
+  ];
+}
+
 function buildRunMarkdown(run) {
   return [
     `# Test Run: ${run.testTitle}`,
@@ -306,6 +403,8 @@ function buildRunMarkdown(run) {
     `- answer: ${run.answer}`,
     `- startup_created: ${run.startupCreated}`,
     `- app_diagnostic_tag: ${run.appDiagnosticTag || APP_DIAGNOSTIC_TAG}`,
+    `- latest_app_js_tag: ${run.buildCheck?.latestTag || "unknown"}`,
+    `- build_is_fresh: ${run.buildCheck?.isFresh ?? true}`,
     `- run_status_message: ${run.statusMessage || "(none)"}`,
     ...(run.automationError ? [`- automation_error: ${run.automationError}`] : []),
     "",
@@ -515,8 +614,10 @@ async function runTestById(test, expectedText) {
       const firstPass = `${expectedText} (1/2)`;
       const secondPass = `${expectedText} (2/2)`;
 
+      addDiagnostic("rerun.stability.strategy", "Using single-container updates to avoid SDK rejection from blank/whitespace secondary containers.");
+
       const runOne = await probeCreateStartupWithRetry({
-        containerTotalNum: 2,
+        containerTotalNum: 1,
         textObject: [
           {
             xPosition: 0,
@@ -524,17 +625,8 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 80,
             containerID: 1,
-            containerName: "multi-a",
+            containerName: "rerun-a",
             content: firstPass,
-          },
-          {
-            xPosition: 0,
-            yPosition: 420,
-            width: 480,
-            height: 40,
-            containerID: 2,
-            containerName: "multi-b",
-            content: STARTUP_CLEAR_TEXT,
           },
         ],
       }, 3, 600);
@@ -543,7 +635,7 @@ async function runTestById(test, expectedText) {
       await sleep(250);
 
       const runTwo = await probeCreateStartupWithRetry({
-        containerTotalNum: 2,
+        containerTotalNum: 1,
         textObject: [
           {
             xPosition: 0,
@@ -551,17 +643,8 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 80,
             containerID: 1,
-            containerName: "multi-a",
+            containerName: "rerun-a",
             content: secondPass,
-          },
-          {
-            xPosition: 0,
-            yPosition: 420,
-            width: 480,
-            height: 40,
-            containerID: 2,
-            containerName: "multi-b",
-            content: STARTUP_CLEAR_TEXT,
           },
         ],
       }, 3, 600);
@@ -631,6 +714,13 @@ async function runTestById(test, expectedText) {
 
 async function runTestFlow() {
   resetDiagnostics();
+  await checkBuildFreshness();
+  if (!state.buildCheck.isFresh) {
+    ui.runStatus.textContent = "Blocked: app build is stale. Tap 'Refresh to Latest Build' first.";
+    ui.runStatus.className = "status err";
+    return;
+  }
+
   const test = state.currentTest;
   addDiagnostic("test.start", { testId: test.id, testTitle: test.title });
   const preview = getPreviewForTest(test, state.expectedText);
@@ -675,6 +765,7 @@ async function runTestFlow() {
     runAt: isoNow(),
     startupCreated,
     appDiagnosticTag: APP_DIAGNOSTIC_TAG,
+    buildCheck: { ...state.buildCheck },
     statusMessage: state.lastRunStatusMessage,
     automationError: state.lastAutomationError,
     diagnostics: [...state.diagnostics],
@@ -751,12 +842,7 @@ function buildDebugPrompt() {
     ? run.diagnostics.map((entry) => `- [${entry.at}] ${entry.step}: ${typeof entry.details === "string" ? entry.details : JSON.stringify(entry.details)}`)
     : ["- (none)"];
 
-  const runtimeLines = [
-    `- app_diagnostic_tag: ${run?.appDiagnosticTag || APP_DIAGNOSTIC_TAG}`,
-    `- startUpClearTextLength: ${String(STARTUP_CLEAR_TEXT).length}`,
-    `- startUpClearTextCodePoint: U+${STARTUP_CLEAR_TEXT.codePointAt(0).toString(16).toUpperCase()}`,
-    "- rerun_container2_layout: yPosition=90,height=80,width=480",
-  ];
+  const runtimeLines = buildFingerprintLines(run);
 
   const recentRunLines = run?.githubRecentRuns?.length
     ? run.githubRecentRuns.map((line) => `- ${line}`)
@@ -819,6 +905,7 @@ function resetPage1(advanceCounter) {
   ui.debugWrap.hidden = true;
   ui.debugPrompt.textContent = "";
   setPage(1);
+  setBuildStatusUI();
 }
 
 ui.btnRunTest.addEventListener("click", runTestFlow);
@@ -854,6 +941,9 @@ ui.btnDebug.addEventListener("click", () => {
   ui.debugWrap.hidden = false;
   ui.debugPrompt.textContent = buildDebugPrompt();
 });
+ui.btnRefreshBuild.addEventListener("click", () => {
+  window.location.replace(buildRefreshUrl());
+});
 ui.btnCopyPrompt.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(ui.debugPrompt.textContent);
@@ -863,4 +953,9 @@ ui.btnCopyPrompt.addEventListener("click", async () => {
   }
 });
 
-resetPage1(false);
+async function initializeApp() {
+  resetPage1(false);
+  await checkBuildFreshness();
+}
+
+initializeApp();

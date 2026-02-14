@@ -176,11 +176,16 @@
     <section id="page1" class="page">
       <h1 id="testTitle">Test #1: Loading…</h1>
       <p><strong>Goal:</strong> <span id="testGoal"></span></p>
+      <p><strong>SDK/API method being tested:</strong> <span id="testApiName"></span></p>
+      <p><strong>Plain-English meaning:</strong> <span id="testApiMeaning"></span></p>
+      <p><strong>What this unlocks if it passes:</strong> <span id="testUnlocks"></span></p>
+      <p><strong>How this differs from the previous test:</strong> <span id="testDiffFromPrev"></span></p>
       <div class="lookfor-block">
         <h2>What to look for on the glasses:</h2>
         <div id="lookForViewer" class="code-viewer"></div>
       </div>
       <div class="btn-row">
+        <button id="btnPrevTest" class="btn-flat-white">Go to Previous Test</button>
         <button id="btnRunTest" class="run-test">Run Test</button>
       </div>
       <p id="runStatus" class="status"></p>

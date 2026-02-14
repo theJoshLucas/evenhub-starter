@@ -6,8 +6,13 @@ const ui = {
   page3: $("page3"),
   testTitle: $("testTitle"),
   testGoal: $("testGoal"),
+  testApiName: $("testApiName"),
+  testApiMeaning: $("testApiMeaning"),
+  testUnlocks: $("testUnlocks"),
+  testDiffFromPrev: $("testDiffFromPrev"),
   lookForViewer: $("lookForViewer"),
   lookForViewerPage2: $("lookForViewerPage2"),
+  btnPrevTest: $("btnPrevTest"),
   btnRunTest: $("btnRunTest"),
   runStatus: $("runStatus"),
   btnYes: $("btnYes"),
@@ -34,42 +39,70 @@ const TESTS = [
     id: "bridge-availability-check",
     title: "Bridge availability check",
     goal: "Confirm the app can connect to the Even bridge and stays responsive.",
+    sdkTarget: "waitForEvenAppBridge()",
+    plainMeaning: "This waits until the app is actually connected to the glasses bridge instead of guessing.",
+    unlocks: "Reliable communication with the glasses before we try any startup-page commands.",
+    differsFromPrevious: "This is the baseline test, so there is no earlier test to compare against.",
     buildExpectedText: () => `Bridge check @ ${isoNow()}`,
   },
   {
     id: "hello-world-startup",
     title: "Startup text render",
     goal: "Confirm a basic startup message appears on the glasses.",
+    sdkTarget: "bridge.createStartUpPageContainer(new CreateStartUpPageContainer(...))",
+    plainMeaning: "We send one simple text block to the glasses startup page.",
+    unlocks: "Proof that we can show custom startup content at all.",
+    differsFromPrevious: "Now we move from just connecting to actually sending visible content.",
     buildExpectedText: () => `Hello world @ ${isoNow()}`,
   },
   {
     id: "startup-offset-size",
     title: "Startup render with changed position/size",
     goal: "Confirm text still renders when moved and resized.",
+    sdkTarget: "CreateStartUpPageContainer textObject layout fields (xPosition, yPosition, width, height)",
+    plainMeaning: "We keep one text block, but change where it appears and how big its box is.",
+    unlocks: "Control over layout so you can design readable startup screens, not just default placement.",
+    differsFromPrevious: "Previous test proved basic rendering; this one proves layout customization.",
     buildExpectedText: () => `Offset text @ ${isoNow()}`,
   },
   {
     id: "startup-multi-container",
     title: "Multi-container startup page",
     goal: "Confirm two separate text blocks appear together on startup.",
+    sdkTarget: "CreateStartUpPageContainer.containerTotalNum + multiple textObject entries",
+    plainMeaning: "We send two independent text containers in one startup payload.",
+    unlocks: "Ability to build multi-line or multi-section startup UIs (for example title + status line).",
+    differsFromPrevious: "Previous test used one container; this one verifies multiple containers together.",
     buildExpectedText: () => `Block A @ ${isoNow()}`,
   },
   {
     id: "rerun-update-stability",
     title: "Re-run update stability",
     goal: "Confirm running startup updates twice in a row does not freeze.",
+    sdkTarget: "Repeated calls to bridge.createStartUpPageContainer()",
+    plainMeaning: "We call the same startup API twice quickly to make sure updates stay stable.",
+    unlocks: "Confidence that your app can refresh startup content without hanging.",
+    differsFromPrevious: "Previous test checked one multi-container send; this checks back-to-back updates.",
     buildExpectedText: () => `Stability run @ ${isoNow()}`,
   },
   {
     id: "intentional-bad-payload",
     title: "Error-handling test",
     goal: "Confirm an intentional bad request shows a graceful warning (not a crash).",
+    sdkTarget: "Validation/error path from createStartUpPageContainer payload mismatch",
+    plainMeaning: "We intentionally send malformed startup data to verify failure is handled safely.",
+    unlocks: "Safer app behavior when something goes wrong, with useful warnings instead of a crash.",
+    differsFromPrevious: "Previous test validates success stability; this one validates failure safety.",
     buildExpectedText: () => `Bad payload check @ ${isoNow()}`,
   },
   {
     id: "persistence-loop-sanity",
     title: "Persistence/loop sanity",
     goal: "Confirm the next-test counter advances through the sequence predictably.",
+    sdkTarget: "Local test progression state via localStorage key starterKit.testCounter.v1",
+    plainMeaning: "We verify the app remembers which test is next and loops through tests in order.",
+    unlocks: "Predictable test navigation so you can resume and revisit tests without confusion.",
+    differsFromPrevious: "Previous test focused on API errors; this one checks workflow/navigation reliability.",
     buildExpectedText: () => `Sequence check #${getCurrentCounter()} @ ${isoNow()}`,
   },
 ];
@@ -94,6 +127,11 @@ function getCurrentCounter() {
 
 function bumpCounter() {
   state.currentTestNumber += 1;
+  localStorage.setItem(TEST_COUNTER_KEY, String(state.currentTestNumber));
+}
+
+function setCounter(value) {
+  state.currentTestNumber = value;
   localStorage.setItem(TEST_COUNTER_KEY, String(state.currentTestNumber));
 }
 
@@ -587,6 +625,10 @@ function resetPage1(advanceCounter) {
 
   ui.testTitle.textContent = `Test #${state.currentTestNumber}: ${state.currentTest.title}`;
   ui.testGoal.textContent = state.currentTest.goal;
+  ui.testApiName.textContent = state.currentTest.sdkTarget;
+  ui.testApiMeaning.textContent = state.currentTest.plainMeaning;
+  ui.testUnlocks.textContent = state.currentTest.unlocks;
+  ui.testDiffFromPrev.textContent = state.currentTest.differsFromPrevious;
   ui.lookForViewer.textContent = renderExpectedLines([state.expectedText]);
   ui.lookForViewerPage2.textContent = renderExpectedLines([state.expectedText]);
 
@@ -617,6 +659,18 @@ ui.btnNotSure.addEventListener("click", () => {
 
 ui.btnNext.addEventListener("click", () => resetPage1(true));
 ui.btnRetry.addEventListener("click", () => resetPage1(false));
+ui.btnPrevTest.addEventListener("click", () => {
+  if (state.currentTestNumber <= 1) {
+    ui.runStatus.textContent = "You are already on Test #1.";
+    ui.runStatus.className = "status";
+    return;
+  }
+
+  setCounter(state.currentTestNumber - 1);
+  resetPage1(false);
+  ui.runStatus.textContent = `Moved back to Test #${state.currentTestNumber}.`;
+  ui.runStatus.className = "status ok";
+});
 ui.btnDebug.addEventListener("click", () => {
   ui.debugWrap.hidden = false;
   ui.debugPrompt.textContent = buildDebugPrompt();

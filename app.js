@@ -35,7 +35,7 @@ const ui = {
 
 const GITHUB_EXPORT_SETTINGS_KEY = "starterKit.githubExportSettings.v1";
 const TEST_COUNTER_KEY = "starterKit.testCounter.v1";
-const STARTUP_CLEAR_TEXT = "\u200B";
+const STARTUP_CLEAR_TEXT = "[cleared]";
 
 const TESTS = [
   {
@@ -443,15 +443,15 @@ async function runTestById(test, expectedText) {
           },
           {
             xPosition: 0,
-            yPosition: 90,
+            yPosition: 420,
             width: 480,
-            height: 80,
+            height: 40,
             containerID: 2,
             containerName: "stability-b",
             content: STARTUP_CLEAR_TEXT,
           },
         ],
-      }, 1, 300);
+      }, 3, 600);
 
       const runTwo = await probeCreateStartupWithRetry({
         containerTotalNum: 2,
@@ -467,15 +467,15 @@ async function runTestById(test, expectedText) {
           },
           {
             xPosition: 0,
-            yPosition: 90,
+            yPosition: 420,
             width: 480,
-            height: 80,
+            height: 40,
             containerID: 2,
             containerName: "stability-b",
             content: STARTUP_CLEAR_TEXT,
           },
         ],
-      }, 1, 300);
+      }, 3, 600);
 
       const startupCreated = runOne && runTwo;
       return {
@@ -483,7 +483,7 @@ async function runTestById(test, expectedText) {
         lookFor: [secondPass],
         layoutHint: "Expected layout: only one visible line from this test. Previous Block A/Block B text should be replaced.",
         statusMessage: startupCreated
-          ? "Sent two updates in sequence. Confirm the latest text replaced older multi-container text."
+          ? "Sent two updates in sequence with retry. Confirm the latest text replaced older multi-container text."
           : "At least one update returned an error code. Continue with your observation.",
       };
     }

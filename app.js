@@ -36,6 +36,7 @@ const ui = {
 const GITHUB_EXPORT_SETTINGS_KEY = "starterKit.githubExportSettings.v1";
 const TEST_COUNTER_KEY = "starterKit.testCounter.v1";
 const STARTUP_CLEAR_TEXT = " ";
+const APP_DIAGNOSTIC_TAG = "eb476dd";
 
 const TESTS = [
   {
@@ -304,6 +305,7 @@ function buildRunMarkdown(run) {
     `- result: ${run.result}`,
     `- answer: ${run.answer}`,
     `- startup_created: ${run.startupCreated}`,
+    `- app_diagnostic_tag: ${run.appDiagnosticTag || APP_DIAGNOSTIC_TAG}`,
     `- run_status_message: ${run.statusMessage || "(none)"}`,
     ...(run.automationError ? [`- automation_error: ${run.automationError}`] : []),
     "",
@@ -672,6 +674,7 @@ async function runTestFlow() {
     layoutHint,
     runAt: isoNow(),
     startupCreated,
+    appDiagnosticTag: APP_DIAGNOSTIC_TAG,
     statusMessage: state.lastRunStatusMessage,
     automationError: state.lastAutomationError,
     diagnostics: [...state.diagnostics],
@@ -748,6 +751,13 @@ function buildDebugPrompt() {
     ? run.diagnostics.map((entry) => `- [${entry.at}] ${entry.step}: ${typeof entry.details === "string" ? entry.details : JSON.stringify(entry.details)}`)
     : ["- (none)"];
 
+  const runtimeLines = [
+    `- app_diagnostic_tag: ${run?.appDiagnosticTag || APP_DIAGNOSTIC_TAG}`,
+    `- startUpClearTextLength: ${String(STARTUP_CLEAR_TEXT).length}`,
+    `- startUpClearTextCodePoint: U+${STARTUP_CLEAR_TEXT.codePointAt(0).toString(16).toUpperCase()}`,
+    "- rerun_container2_layout: yPosition=90,height=80,width=480",
+  ];
+
   const recentRunLines = run?.githubRecentRuns?.length
     ? run.githubRecentRuns.map((line) => `- ${line}`)
     : ["- (not available)"];
@@ -765,6 +775,9 @@ function buildDebugPrompt() {
     "",
     "## Recent GitHub test files",
     ...recentRunLines,
+    "",
+    "## Runtime fingerprint",
+    ...runtimeLines,
     "",
     "## Detailed diagnostics",
     ...diagLines,

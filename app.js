@@ -35,6 +35,8 @@ const ui = {
 
 const GITHUB_EXPORT_SETTINGS_KEY = "starterKit.githubExportSettings.v1";
 const TEST_COUNTER_KEY = "starterKit.testCounter.v1";
+const STARTUP_CLEAR_TEXT = " ";
+const APP_DIAGNOSTIC_TAG = "eb476dd";
 
 const TESTS = [
   {
@@ -116,6 +118,10 @@ const state = {
   currentTest: null,
   activeRun: null,
   expectedText: "",
+  diagnostics: [],
+  lastRunStatusMessage: "",
+  lastAutomationError: "",
+  githubRecentRuns: [],
 };
 
 function isoNow() {
@@ -190,6 +196,38 @@ async function getFileSha(owner, repo, branch, path, token) {
   return data.sha || null;
 }
 
+async function fetchRecentGitHubRunFiles(limit = 5) {
+  const settings = loadGitHubExportSettings();
+  if (!settings) return { ok: false, reason: "GitHub settings/token not found in local storage.", files: [] };
+
+  const ownerRepo = parseOwnerRepo(settings.repo);
+  if (!ownerRepo) return { ok: false, reason: "GitHub repo format must be owner/repo.", files: [] };
+
+  const url = `https://api.github.com/repos/${ownerRepo.owner}/${ownerRepo.repo}/contents/testing/runs?ref=${encodeURIComponent(settings.branch)}`;
+  const resp = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${settings.token}`,
+      Accept: "application/vnd.github+json",
+    },
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    return { ok: false, reason: `Failed listing runs (${resp.status}): ${text}`, files: [] };
+  }
+
+  const data = await resp.json();
+  const files = Array.isArray(data)
+    ? data
+      .filter((entry) => entry?.type === "file" && typeof entry?.name === "string")
+      .map((entry) => entry.name)
+      .sort((a, b) => b.localeCompare(a))
+      .slice(0, limit)
+    : [];
+
+  return { ok: true, reason: "", files };
+}
+
 async function commitRunToGitHub(filename, content) {
   const settings = loadGitHubExportSettings();
   if (!settings) throw new Error("GitHub settings/token not found in local storage.");
@@ -230,6 +268,34 @@ function sanitizeFileText(text) {
   return text.toLowerCase().replace(/[^a-z0-9\-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
 
+function resetDiagnostics() {
+  state.diagnostics = [];
+  state.lastRunStatusMessage = "";
+  state.lastAutomationError = "";
+  state.githubRecentRuns = [];
+}
+
+function addDiagnostic(step, details) {
+  state.diagnostics.push({ at: isoNow(), step, details });
+}
+
+function summarizePayload(payloadConfig) {
+  const textObject = Array.isArray(payloadConfig?.textObject) ? payloadConfig.textObject : [];
+  return {
+    containerTotalNum: payloadConfig?.containerTotalNum,
+    textObject: textObject.map((item) => ({
+      containerID: item.containerID,
+      containerName: item.containerName,
+      xPosition: item.xPosition,
+      yPosition: item.yPosition,
+      width: item.width,
+      height: item.height,
+      contentPreview: String(item.content ?? "").slice(0, 48),
+      contentLength: String(item.content ?? "").length,
+    })),
+  };
+}
+
 function buildRunMarkdown(run) {
   return [
     `# Test Run: ${run.testTitle}`,
@@ -239,6 +305,9 @@ function buildRunMarkdown(run) {
     `- result: ${run.result}`,
     `- answer: ${run.answer}`,
     `- startup_created: ${run.startupCreated}`,
+    `- app_diagnostic_tag: ${run.appDiagnosticTag || APP_DIAGNOSTIC_TAG}`,
+    `- run_status_message: ${run.statusMessage || "(none)"}`,
+    ...(run.automationError ? [`- automation_error: ${run.automationError}`] : []),
     "",
     "## Goal",
     run.goal,
@@ -246,6 +315,16 @@ function buildRunMarkdown(run) {
     "## Expected on glasses",
     ...run.lookFor.map((line) => `- ${line}`),
     ...(run.layoutHint ? ["", "## Expected layout", run.layoutHint] : []),
+    "",
+    "## GitHub recent run files (before save)",
+    ...(Array.isArray(run.githubRecentRuns) && run.githubRecentRuns.length
+      ? run.githubRecentRuns.map((line) => `- ${line}`)
+      : ["- (not available)"]),
+    "",
+    "## Diagnostics",
+    ...(Array.isArray(run.diagnostics) && run.diagnostics.length
+      ? run.diagnostics.map((entry) => `- [${entry.at}] ${entry.step}: ${typeof entry.details === "string" ? entry.details : JSON.stringify(entry.details)}`)
+      : ["- (none)"]),
     "",
     "## Notes",
     run.notes || "(none)",
@@ -298,11 +377,15 @@ async function probeCreateStartup(expectedText) {
 }
 
 async function probeCreateStartupWithPayload(payloadConfig) {
+  const payloadSummary = summarizePayload(payloadConfig);
+  addDiagnostic("createStartUpPageContainer.request", payloadSummary);
   const bridge = await ensureBridge();
   const { CreateStartUpPageContainer } = state.SDK;
   const payload = new CreateStartUpPageContainer(payloadConfig);
   const result = await bridge.createStartUpPageContainer(payload);
-  return result === 0 || result === "0";
+  const success = result === 0 || result === "0";
+  addDiagnostic("createStartUpPageContainer.response", { success, rawResult: result });
+  return success;
 }
 
 function sleep(ms) {
@@ -312,9 +395,13 @@ function sleep(ms) {
 async function probeCreateStartupWithRetry(payloadConfig, retries = 1, delayMs = 250) {
   let lastResult = false;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
+    addDiagnostic("createStartUpPageContainer.attempt", { attempt: attempt + 1, totalAttempts: retries + 1 });
     lastResult = await probeCreateStartupWithPayload(payloadConfig);
     if (lastResult) return true;
-    if (attempt < retries) await sleep(delayMs);
+    if (attempt < retries) {
+      addDiagnostic("createStartUpPageContainer.retry_wait", { delayMs });
+      await sleep(delayMs);
+    }
   }
   return lastResult;
 }
@@ -437,7 +524,7 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 80,
             containerID: 1,
-            containerName: "stability-a",
+            containerName: "multi-a",
             content: firstPass,
           },
           {
@@ -446,11 +533,14 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 80,
             containerID: 2,
-            containerName: "stability-b",
-            content: "",
+            containerName: "multi-b",
+            content: STARTUP_CLEAR_TEXT,
           },
         ],
-      }, 1, 300);
+      }, 3, 600);
+
+      addDiagnostic("rerun.stability.pause_before_second_pass", { delayMs: 250 });
+      await sleep(250);
 
       const runTwo = await probeCreateStartupWithRetry({
         containerTotalNum: 2,
@@ -461,7 +551,7 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 80,
             containerID: 1,
-            containerName: "stability-a",
+            containerName: "multi-a",
             content: secondPass,
           },
           {
@@ -470,11 +560,11 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 80,
             containerID: 2,
-            containerName: "stability-b",
-            content: "",
+            containerName: "multi-b",
+            content: STARTUP_CLEAR_TEXT,
           },
         ],
-      }, 1, 300);
+      }, 3, 600);
 
       const startupCreated = runOne && runTwo;
       return {
@@ -482,8 +572,8 @@ async function runTestById(test, expectedText) {
         lookFor: [secondPass],
         layoutHint: "Expected layout: only one visible line from this test. Previous Block A/Block B text should be replaced.",
         statusMessage: startupCreated
-          ? "Sent two updates in sequence. Confirm the latest text replaced older multi-container text."
-          : "At least one update returned an error code. Continue with your observation.",
+          ? "Sent two updates in sequence. Confirm both old Block A/Block B lines were replaced."
+          : `At least one update returned an error code (pass1=${runOne}, pass2=${runTwo}). Continue with your observation.`,
       };
     }
     case "intentional-bad-payload": {
@@ -540,7 +630,9 @@ async function runTestById(test, expectedText) {
 }
 
 async function runTestFlow() {
+  resetDiagnostics();
   const test = state.currentTest;
+  addDiagnostic("test.start", { testId: test.id, testTitle: test.title });
   const preview = getPreviewForTest(test, state.expectedText);
   ui.lookForViewerPage2.textContent = renderExpectedLines(preview.lines);
   ui.expectedLayoutPage2.textContent = preview.layoutHint;
@@ -561,9 +653,15 @@ async function runTestFlow() {
     ui.expectedLayoutPage2.textContent = layoutHint;
     ui.expectedLayoutPage2.hidden = !layoutHint;
     ui.runStatus.textContent = result.statusMessage;
+    state.lastRunStatusMessage = result.statusMessage;
+    addDiagnostic("test.status", result.statusMessage);
   } catch (error) {
-    ui.runStatus.textContent = `Automation warning: ${String(error)}`;
+    const warning = `Automation warning: ${String(error)}`;
+    ui.runStatus.textContent = warning;
     ui.runStatus.className = "status err";
+    state.lastAutomationError = String(error);
+    state.lastRunStatusMessage = warning;
+    addDiagnostic("test.error", String(error));
   } finally {
     ui.btnRunTest.disabled = false;
   }
@@ -576,6 +674,11 @@ async function runTestFlow() {
     layoutHint,
     runAt: isoNow(),
     startupCreated,
+    appDiagnosticTag: APP_DIAGNOSTIC_TAG,
+    statusMessage: state.lastRunStatusMessage,
+    automationError: state.lastAutomationError,
+    diagnostics: [...state.diagnostics],
+    githubRecentRuns: [],
     answer: "",
     notes: "",
     result: "",
@@ -612,12 +715,23 @@ async function saveResult(answer) {
   state.activeRun.savedFile = filename;
 
   try {
+    const recentRuns = await fetchRecentGitHubRunFiles(5);
+    state.activeRun.githubRecentRuns = recentRuns.ok
+      ? recentRuns.files
+      : [`lookup_failed: ${recentRuns.reason}`];
+    addDiagnostic("github.recent_runs", state.activeRun.githubRecentRuns);
+    state.activeRun.diagnostics = [...state.diagnostics];
+
     const content = buildRunMarkdown(state.activeRun);
     await commitRunToGitHub(filename, content);
+    addDiagnostic("github.save", { success: true, filename });
+    state.activeRun.diagnostics = [...state.diagnostics];
     ui.confirmationTitle.textContent = `Saved successfully to testing/runs/${filename}`;
     ui.submitStatus.textContent = "";
     setPage(3);
   } catch (e) {
+    addDiagnostic("github.save", { success: false, error: String(e) });
+    state.activeRun.diagnostics = [...state.diagnostics];
     ui.submitStatus.textContent = `Save failed: ${String(e)}`;
     ui.submitStatus.className = "status err";
   }
@@ -626,8 +740,27 @@ async function saveResult(answer) {
 function buildDebugPrompt() {
   const run = state.activeRun;
   const summary = run
-    ? `- Test: ${run.testTitle}\n- Result selected by human: ${run.answer}\n- Notes: ${run.notes || "(none)"}\n- Startup call success: ${run.startupCreated}`
+    ? `- Test: ${run.testTitle}
+- Result selected by human: ${run.answer}
+- Notes: ${run.notes || "(none)"}
+- Startup call success: ${run.startupCreated}
+- Run status message: ${run.statusMessage || "(none)"}${run.automationError ? `\n- Automation error: ${run.automationError}` : ""}`
     : "- No run data found.";
+
+  const diagLines = run?.diagnostics?.length
+    ? run.diagnostics.map((entry) => `- [${entry.at}] ${entry.step}: ${typeof entry.details === "string" ? entry.details : JSON.stringify(entry.details)}`)
+    : ["- (none)"];
+
+  const runtimeLines = [
+    `- app_diagnostic_tag: ${run?.appDiagnosticTag || APP_DIAGNOSTIC_TAG}`,
+    `- startUpClearTextLength: ${String(STARTUP_CLEAR_TEXT).length}`,
+    `- startUpClearTextCodePoint: U+${STARTUP_CLEAR_TEXT.codePointAt(0).toString(16).toUpperCase()}`,
+    "- rerun_container2_layout: yPosition=90,height=80,width=480",
+  ];
+
+  const recentRunLines = run?.githubRecentRuns?.length
+    ? run.githubRecentRuns.map((line) => `- ${line}`)
+    : ["- (not available)"];
 
   return [
     "# Debug Request for Follow-up Test",
@@ -640,12 +773,22 @@ function buildDebugPrompt() {
     "## What happened",
     summary,
     "",
+    "## Recent GitHub test files",
+    ...recentRunLines,
+    "",
+    "## Runtime fingerprint",
+    ...runtimeLines,
+    "",
+    "## Detailed diagnostics",
+    ...diagLines,
+    "",
     "## What I need from you",
     "1. Explain the likely root cause in plain English.",
     "2. Either implement a fix if you're confident you can solve the problem, or suggest the next course of action.",
     "",
   ].join("\n");
 }
+
 
 function resetPage1(advanceCounter) {
   if (advanceCounter) bumpCounter();

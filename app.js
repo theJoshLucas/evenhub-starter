@@ -515,9 +515,7 @@ function buildDebugPrompt() {
     "",
     "## What I need from you",
     "1. Explain the likely root cause in plain English.",
-    "2. Suggest the smallest safe code change to improve reliability.",
-    "3. Generate one follow-up manual test with exact expected glasses output.",
-    "4. Tell me exactly which files to inspect next.",
+    "2. Either implement a fix if you're confident you can solve the problem, or suggest the next course of action.",
     "",
   ].join("\n");
 }

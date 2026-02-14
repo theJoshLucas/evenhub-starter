@@ -278,6 +278,11 @@ async function probeCreateStartupWithRetry(payloadConfig, retries = 1, delayMs =
   return lastResult;
 }
 
+
+function renderExpectedLines(lines) {
+  return Array.isArray(lines) ? lines.join("\n") : String(lines || "");
+}
+
 async function runTestById(test, expectedText) {
   switch (test.id) {
     case "bridge-availability-check": {
@@ -347,23 +352,77 @@ async function runTestById(test, expectedText) {
       const startupCreated = await probeCreateStartupWithRetry(startupPayload, 1, 300);
       return {
         startupCreated,
-        lookFor: [expectedText, secondLine],
+        lookFor: [
+          expectedText,
+          secondLine,
+          "Expected layout: Block A then Block B, with no intentionally blank spacer lines between them.",
+        ],
         statusMessage: startupCreated
-          ? "Two startup blocks sent. Confirm both are visible."
+          ? "Two startup blocks sent. Confirm both are visible (wrapping may vary by device/font)."
           : "Multi-container test returned an error code. Continue with your observation.",
       };
     }
     case "rerun-update-stability": {
       const firstPass = `${expectedText} (1/2)`;
       const secondPass = `${expectedText} (2/2)`;
-      const runOne = await probeCreateStartup(firstPass);
-      const runTwo = await probeCreateStartup(secondPass);
+
+      const runOne = await probeCreateStartupWithRetry({
+        containerTotalNum: 2,
+        textObject: [
+          {
+            xPosition: 0,
+            yPosition: 0,
+            width: 480,
+            height: 80,
+            containerID: 1,
+            containerName: "stability-a",
+            content: firstPass,
+          },
+          {
+            xPosition: 0,
+            yPosition: 90,
+            width: 480,
+            height: 80,
+            containerID: 2,
+            containerName: "stability-b",
+            content: "",
+          },
+        ],
+      }, 1, 300);
+
+      const runTwo = await probeCreateStartupWithRetry({
+        containerTotalNum: 2,
+        textObject: [
+          {
+            xPosition: 0,
+            yPosition: 0,
+            width: 480,
+            height: 80,
+            containerID: 1,
+            containerName: "stability-a",
+            content: secondPass,
+          },
+          {
+            xPosition: 0,
+            yPosition: 90,
+            width: 480,
+            height: 80,
+            containerID: 2,
+            containerName: "stability-b",
+            content: "",
+          },
+        ],
+      }, 1, 300);
+
       const startupCreated = runOne && runTwo;
       return {
         startupCreated,
-        lookFor: [secondPass],
+        lookFor: [
+          secondPass,
+          "Expected layout: only one visible line from this test. Previous Block A/Block B text should be replaced.",
+        ],
         statusMessage: startupCreated
-          ? "Sent two updates in sequence without freezing. Confirm latest text appears."
+          ? "Sent two updates in sequence. Confirm the latest text replaced older multi-container text."
           : "At least one update returned an error code. Continue with your observation.",
       };
     }
@@ -422,7 +481,7 @@ async function runTestById(test, expectedText) {
 
 async function runTestFlow() {
   const test = state.currentTest;
-  ui.lookForViewerPage2.textContent = `\n\n${state.expectedText}\n\n`;
+  ui.lookForViewerPage2.textContent = renderExpectedLines([state.expectedText]);
   ui.runStatus.textContent = "Running test…";
   ui.runStatus.className = "status";
   ui.btnRunTest.disabled = true;
@@ -433,7 +492,7 @@ async function runTestFlow() {
     const result = await runTestById(test, state.expectedText);
     startupCreated = result.startupCreated;
     lookFor = result.lookFor;
-    ui.lookForViewerPage2.textContent = `\n\n${lookFor.join("\n")}\n\n`;
+    ui.lookForViewerPage2.textContent = renderExpectedLines(lookFor);
     ui.runStatus.textContent = result.statusMessage;
   } catch (error) {
     ui.runStatus.textContent = `Automation warning: ${String(error)}`;
@@ -528,8 +587,8 @@ function resetPage1(advanceCounter) {
 
   ui.testTitle.textContent = `Test #${state.currentTestNumber}: ${state.currentTest.title}`;
   ui.testGoal.textContent = state.currentTest.goal;
-  ui.lookForViewer.textContent = `\n\n${state.expectedText}\n\n`;
-  ui.lookForViewerPage2.textContent = `\n\n${state.expectedText}\n\n`;
+  ui.lookForViewer.textContent = renderExpectedLines([state.expectedText]);
+  ui.lookForViewerPage2.textContent = renderExpectedLines([state.expectedText]);
 
   ui.runStatus.textContent = "";
   ui.runStatus.className = "status";

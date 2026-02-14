@@ -527,9 +527,9 @@ async function runTestById(test, expectedText) {
           },
           {
             xPosition: 0,
-            yPosition: 90,
+            yPosition: 420,
             width: 480,
-            height: 80,
+            height: 40,
             containerID: 2,
             containerName: "multi-b",
             content: STARTUP_CLEAR_TEXT,
@@ -554,9 +554,9 @@ async function runTestById(test, expectedText) {
           },
           {
             xPosition: 0,
-            yPosition: 90,
+            yPosition: 420,
             width: 480,
-            height: 80,
+            height: 40,
             containerID: 2,
             containerName: "multi-b",
             content: STARTUP_CLEAR_TEXT,

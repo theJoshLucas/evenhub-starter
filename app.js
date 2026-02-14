@@ -264,6 +264,20 @@ async function probeCreateStartupWithPayload(payloadConfig) {
   return result === 0 || result === "0";
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function probeCreateStartupWithRetry(payloadConfig, retries = 1, delayMs = 250) {
+  let lastResult = false;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    lastResult = await probeCreateStartupWithPayload(payloadConfig);
+    if (lastResult) return true;
+    if (attempt < retries) await sleep(delayMs);
+  }
+  return lastResult;
+}
+
 async function runTestById(test, expectedText) {
   switch (test.id) {
     case "bridge-availability-check": {
@@ -307,7 +321,7 @@ async function runTestById(test, expectedText) {
     }
     case "startup-multi-container": {
       const secondLine = `Block B @ ${isoNow()}`;
-      const startupCreated = await probeCreateStartupWithPayload({
+      const startupPayload = {
         containerTotalNum: 2,
         textObject: [
           {
@@ -329,7 +343,8 @@ async function runTestById(test, expectedText) {
             content: secondLine,
           },
         ],
-      });
+      };
+      const startupCreated = await probeCreateStartupWithRetry(startupPayload, 1, 300);
       return {
         startupCreated,
         lookFor: [expectedText, secondLine],

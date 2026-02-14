@@ -35,6 +35,7 @@ const ui = {
 
 const GITHUB_EXPORT_SETTINGS_KEY = "starterKit.githubExportSettings.v1";
 const TEST_COUNTER_KEY = "starterKit.testCounter.v1";
+const STARTUP_CLEAR_TEXT = "\u200B";
 
 const TESTS = [
   {
@@ -447,7 +448,7 @@ async function runTestById(test, expectedText) {
             height: 80,
             containerID: 2,
             containerName: "stability-b",
-            content: "",
+            content: STARTUP_CLEAR_TEXT,
           },
         ],
       }, 1, 300);
@@ -471,7 +472,7 @@ async function runTestById(test, expectedText) {
             height: 80,
             containerID: 2,
             containerName: "stability-b",
-            content: "",
+            content: STARTUP_CLEAR_TEXT,
           },
         ],
       }, 1, 300);

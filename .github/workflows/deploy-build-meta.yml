@@ -1,0 +1,36 @@
+name: Deploy metadata refresh
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+jobs:
+  refresh-build-meta:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Generate build metadata
+        run: ./scripts/generate-build-meta.sh build-meta.json
+
+      - name: Verify build-meta fields
+        run: |
+          python - <<'PY'
+          import json
+          with open('build-meta.json', 'r', encoding='utf-8') as f:
+            data = json.load(f)
+          required = ['build_id', 'git_sha', 'built_at', 'app_version_tag']
+          missing = [key for key in required if not data.get(key)]
+          if missing:
+            raise SystemExit(f"Missing required fields: {missing}")
+          print('build-meta.json validated successfully')
+          PY
+
+      - name: Upload build metadata artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-meta
+          path: build-meta.json

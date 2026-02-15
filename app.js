@@ -37,7 +37,7 @@ const ui = {
 
 const GITHUB_EXPORT_SETTINGS_KEY = "starterKit.githubExportSettings.v1";
 const TEST_COUNTER_KEY = "starterKit.testCounter.v1";
-const APP_DIAGNOSTIC_TAG = "diag-v7-rerun-guard";
+const BUILD_META_URL = "./build-meta.json";
 
 const TESTS = [
   {
@@ -124,9 +124,11 @@ const state = {
   lastAutomationError: "",
   githubRecentRuns: [],
   buildCheck: {
-    loadedTag: APP_DIAGNOSTIC_TAG,
-    latestTag: "",
-    isFresh: true,
+    buildId: "unknown",
+    gitSha: "unknown",
+    builtAt: "unknown",
+    appVersionTag: "unknown",
+    isFresh: false,
     reason: "Not checked yet",
     checkedAt: "",
   },
@@ -312,64 +314,57 @@ function setBuildStatusUI() {
   ui.buildStatus.hidden = false;
 
   if (check.isFresh) {
-    ui.buildStatus.textContent = `Build check OK. Running tag: ${check.loadedTag}.`;
+    ui.buildStatus.textContent = `Build metadata loaded. Build ID: ${check.buildId} (git ${check.gitSha}).`;
     ui.buildStatus.className = "status ok";
     ui.btnRefreshBuild.hidden = true;
     ui.btnRunTest.disabled = false;
     return;
   }
 
-  ui.buildStatus.textContent = `This page is using an old cached build (${check.loadedTag}). Latest is ${check.latestTag || "unknown"}. Tap refresh to load latest before testing.`;
+  ui.buildStatus.textContent = `Build metadata missing or invalid: ${check.reason}. Tests are blocked until build-meta.json is available.`;
   ui.buildStatus.className = "status err";
   ui.btnRefreshBuild.hidden = false;
   ui.btnRunTest.disabled = true;
 }
 
-function extractDiagnosticTag(sourceText) {
-  const match = sourceText.match(/const APP_DIAGNOSTIC_TAG = "([^"]+)";/);
-  return match?.[1] || "";
-}
-
 async function checkBuildFreshness() {
   const cacheBust = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const url = `./app.js?fresh=${encodeURIComponent(cacheBust)}`;
+  const url = `${BUILD_META_URL}?fresh=${encodeURIComponent(cacheBust)}`;
 
   try {
     const resp = await fetch(url, { cache: "no-store" });
     if (!resp.ok) {
-      state.buildCheck = {
-        ...state.buildCheck,
-        latestTag: "",
-        isFresh: true,
-        reason: `Skipped strict check: unable to fetch latest app.js (${resp.status}).`,
-        checkedAt: isoNow(),
-      };
-      addDiagnostic("build.check", state.buildCheck);
-      setBuildStatusUI();
-      return state.buildCheck;
+      throw new Error(`HTTP ${resp.status}`);
     }
 
-    const text = await resp.text();
-    const latestTag = extractDiagnosticTag(text);
-    const loadedTag = APP_DIAGNOSTIC_TAG;
-    const isFresh = !!latestTag && latestTag === loadedTag;
+    const meta = await resp.json();
+    const buildId = typeof meta?.build_id === "string" ? meta.build_id.trim() : "";
+    const gitSha = typeof meta?.git_sha === "string" ? meta.git_sha.trim() : "";
+    const builtAt = typeof meta?.built_at === "string" ? meta.built_at.trim() : "";
+    const appVersionTag = typeof meta?.app_version_tag === "string" ? meta.app_version_tag.trim() : "";
+
+    if (!buildId || !gitSha || !builtAt || !appVersionTag) {
+      throw new Error("build-meta.json is missing one or more required fields.");
+    }
 
     state.buildCheck = {
-      loadedTag,
-      latestTag,
-      isFresh,
-      reason: isFresh
-        ? "Loaded build matches latest app.js."
-        : "Loaded build is stale compared to latest app.js.",
+      buildId,
+      gitSha,
+      builtAt,
+      appVersionTag,
+      isFresh: true,
+      reason: "build-meta.json loaded successfully.",
       checkedAt: isoNow(),
     };
     addDiagnostic("build.check", state.buildCheck);
   } catch (error) {
     state.buildCheck = {
-      ...state.buildCheck,
-      latestTag: "",
-      isFresh: true,
-      reason: `Skipped strict check due to network/runtime error: ${String(error)}`,
+      buildId: "missing",
+      gitSha: "missing",
+      builtAt: "missing",
+      appVersionTag: "missing",
+      isFresh: false,
+      reason: String(error),
       checkedAt: isoNow(),
     };
     addDiagnostic("build.check", state.buildCheck);
@@ -388,8 +383,10 @@ function buildRefreshUrl() {
 function buildFingerprintLines(run) {
   const check = run?.buildCheck || state.buildCheck;
   return [
-    `- app_diagnostic_tag: ${run?.appDiagnosticTag || APP_DIAGNOSTIC_TAG}`,
-    `- latest_app_js_tag: ${check.latestTag || "unknown"}`,
+    `- build_id: ${run?.buildId || check.buildId || "unknown"}`,
+    `- git_sha: ${check.gitSha || "unknown"}`,
+    `- built_at: ${check.builtAt || "unknown"}`,
+    `- app_version_tag: ${check.appVersionTag || "unknown"}`,
     `- build_is_fresh: ${check.isFresh}`,
     `- build_check_reason: ${check.reason || "(none)"}`,
     "- rerun_strategy: two-container non-empty update payload",
@@ -405,8 +402,10 @@ function buildRunMarkdown(run) {
     `- result: ${run.result}`,
     `- answer: ${run.answer}`,
     `- startup_created: ${run.startupCreated}`,
-    `- app_diagnostic_tag: ${run.appDiagnosticTag || APP_DIAGNOSTIC_TAG}`,
-    `- latest_app_js_tag: ${run.buildCheck?.latestTag || "unknown"}`,
+    `- build_id: ${run.buildId || run.buildCheck?.buildId || "unknown"}`,
+    `- git_sha: ${run.buildCheck?.gitSha || "unknown"}`,
+    `- built_at: ${run.buildCheck?.builtAt || "unknown"}`,
+    `- app_version_tag: ${run.buildCheck?.appVersionTag || "unknown"}`,
     `- build_is_fresh: ${run.buildCheck?.isFresh ?? true}`,
     `- run_status_message: ${run.statusMessage || "(none)"}`,
     ...(run.automationError ? [`- automation_error: ${run.automationError}`] : []),
@@ -749,7 +748,7 @@ async function runTestById(test, expectedText) {
         currentTestId: test.id,
         previousTestWasStartupMultiContainer: previousTestId === "startup-multi-container",
         build: {
-          tag: state.buildCheck.loadedTag || APP_DIAGNOSTIC_TAG,
+          tag: state.buildCheck.buildId || "unknown",
           freshness: state.buildCheck.isFresh,
         },
       });
@@ -844,7 +843,7 @@ async function runTestFlow() {
   resetDiagnostics();
   await checkBuildFreshness();
   if (!state.buildCheck.isFresh) {
-    ui.runStatus.textContent = "Blocked: app build is stale. Tap 'Refresh to Latest Build' first.";
+    ui.runStatus.textContent = `Blocked: cannot run tests until build metadata is loaded (${state.buildCheck.reason}). Tap 'Refresh to Latest Build' after deploy.`;
     ui.runStatus.className = "status err";
     return;
   }
@@ -908,7 +907,7 @@ async function runTestFlow() {
     layoutHint,
     runAt: isoNow(),
     startupCreated,
-    appDiagnosticTag: APP_DIAGNOSTIC_TAG,
+    buildId: state.buildCheck.buildId || "unknown",
     buildCheck: { ...state.buildCheck },
     statusMessage: state.lastRunStatusMessage,
     automationError: state.lastAutomationError,

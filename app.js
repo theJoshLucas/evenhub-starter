@@ -84,8 +84,8 @@ const TESTS = [
     id: "rerun-update-stability",
     title: "Re-run update stability",
     goal: "Confirm running startup updates twice in a row does not freeze.",
-    sdkTarget: "Repeated calls to bridge.createStartUpPageContainer()",
-    plainMeaning: "We call the same startup API twice quickly to make sure updates stay stable.",
+    sdkTarget: "Repeated calls to bridge.textContainerUpgrade() for existing containers",
+    plainMeaning: "We update the same existing startup containers twice quickly to make sure updates stay stable.",
     unlocks: "Confidence that your app can refresh startup content without hanging.",
     differsFromPrevious: "Previous test checked one multi-container send; this checks back-to-back updates.",
     buildExpectedText: () => `Stability run @ ${isoNow()}`,
@@ -511,22 +511,56 @@ async function probeCreateStartupWithPayload(payloadConfig) {
   return success;
 }
 
+async function probeTextContainerUpgradeWithPayload(payloadConfig) {
+  const normalizedPayloadConfig = guardStartupPayload(payloadConfig);
+  const payloadSummary = summarizePayload(normalizedPayloadConfig);
+  addDiagnostic("textContainerUpgrade.request", payloadSummary);
+  const bridge = await ensureBridge();
+  const { TextContainerUpgrade } = state.SDK;
+  const payload = new TextContainerUpgrade(normalizedPayloadConfig);
+  const result = await bridge.textContainerUpgrade(payload);
+  const success = result === 0 || result === "0";
+  addDiagnostic("textContainerUpgrade.response", { success, rawResult: result });
+  return success;
+}
+
+async function probeRebuildPageContainerWithPayload(payloadConfig) {
+  const normalizedPayloadConfig = guardStartupPayload(payloadConfig);
+  const payloadSummary = summarizePayload(normalizedPayloadConfig);
+  addDiagnostic("rebuildPageContainer.request", payloadSummary);
+  const bridge = await ensureBridge();
+  const { RebuildPageContainer } = state.SDK;
+  const payload = new RebuildPageContainer(normalizedPayloadConfig);
+  const result = await bridge.rebuildPageContainer(payload);
+  const success = result === 0 || result === "0";
+  addDiagnostic("rebuildPageContainer.response", { success, rawResult: result });
+  return success;
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function probeCreateStartupWithRetry(payloadConfig, retries = 1, delayMs = 250) {
+async function probeWithRetry(label, probeFn, retries = 1, delayMs = 250) {
   let lastResult = false;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
-    addDiagnostic("createStartUpPageContainer.attempt", { attempt: attempt + 1, totalAttempts: retries + 1 });
-    lastResult = await probeCreateStartupWithPayload(payloadConfig);
+    addDiagnostic(`${label}.attempt`, { attempt: attempt + 1, totalAttempts: retries + 1 });
+    lastResult = await probeFn();
     if (lastResult) return true;
     if (attempt < retries) {
-      addDiagnostic("createStartUpPageContainer.retry_wait", { delayMs });
+      addDiagnostic(`${label}.retry_wait`, { delayMs });
       await sleep(delayMs);
     }
   }
   return lastResult;
+}
+
+async function probeCreateStartupWithRetry(payloadConfig, retries = 1, delayMs = 250) {
+  return probeWithRetry("createStartUpPageContainer", () => probeCreateStartupWithPayload(payloadConfig), retries, delayMs);
+}
+
+async function probeTextContainerUpgradeWithRetry(payloadConfig, retries = 1, delayMs = 250) {
+  return probeWithRetry("textContainerUpgrade", () => probeTextContainerUpgradeWithPayload(payloadConfig), retries, delayMs);
 }
 
 
@@ -638,9 +672,9 @@ async function runTestById(test, expectedText) {
       const firstPass = `${expectedText} (1/2)`;
       const secondPass = `${expectedText} (2/2)`;
 
-      addDiagnostic("rerun.stability.strategy", "Using two non-empty containers to avoid payload validation failures from blank container updates.");
+      addDiagnostic("rerun.stability.strategy", "Using textContainerUpgrade to update existing container IDs instead of recreating startup containers.");
 
-      const runOne = await probeCreateStartupWithRetry({
+      const runOne = await probeTextContainerUpgradeWithRetry({
         containerTotalNum: 2,
         textObject: [
           {
@@ -667,7 +701,7 @@ async function runTestById(test, expectedText) {
       addDiagnostic("rerun.stability.pause_before_second_pass", { delayMs: 250 });
       await sleep(250);
 
-      const runTwo = await probeCreateStartupWithRetry({
+      const runTwo = await probeTextContainerUpgradeWithRetry({
         containerTotalNum: 2,
         textObject: [
           {

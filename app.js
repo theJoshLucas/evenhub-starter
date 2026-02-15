@@ -434,6 +434,13 @@ function buildRunMarkdown(run) {
   ].join("\n");
 }
 
+function getPreviousTestId(currentTestId) {
+  const currentIndex = TESTS.findIndex((entry) => entry.id === currentTestId);
+  if (currentIndex < 0) return "";
+  const previousIndex = (currentIndex - 1 + TESTS.length) % TESTS.length;
+  return TESTS[previousIndex]?.id || "";
+}
+
 async function importSdk() {
   const candidates = [
     "https://esm.sh/@evenrealities/even_hub_sdk@0.0.7",
@@ -498,7 +505,7 @@ function guardStartupPayload(payloadConfig) {
   return normalized;
 }
 
-async function probeCreateStartupWithPayload(payloadConfig) {
+async function probeCreateStartupWithPayload(payloadConfig, metadata = {}) {
   const normalizedPayloadConfig = guardStartupPayload(payloadConfig);
   const payloadSummary = summarizePayload(normalizedPayloadConfig);
   addDiagnostic("createStartUpPageContainer.request", payloadSummary);
@@ -508,6 +515,22 @@ async function probeCreateStartupWithPayload(payloadConfig) {
   const result = await bridge.createStartUpPageContainer(payload);
   const success = result === 0 || result === "0";
   addDiagnostic("createStartUpPageContainer.response", { success, rawResult: result });
+
+  if (!success) {
+    addDiagnostic("rerun.lifecycle.error_context", {
+      operationType: metadata.operationType || "create",
+      attemptNumber: metadata.attemptNumber || 1,
+      rawResult: result,
+      payloadSummary: {
+        containerTotalNum: payloadSummary.containerTotalNum,
+        containers: payloadSummary.textObject.map((container) => ({
+          id: container.containerID,
+          name: container.containerName,
+        })),
+      },
+    });
+  }
+
   return success;
 }
 
@@ -541,11 +564,14 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function probeWithRetry(label, probeFn, retries = 1, delayMs = 250) {
+async function probeCreateStartupWithRetry(payloadConfig, retries = 1, delayMs = 250, metadata = {}) {
   let lastResult = false;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
-    addDiagnostic(`${label}.attempt`, { attempt: attempt + 1, totalAttempts: retries + 1 });
-    lastResult = await probeFn();
+    addDiagnostic("createStartUpPageContainer.attempt", { attempt: attempt + 1, totalAttempts: retries + 1 });
+    lastResult = await probeCreateStartupWithPayload(payloadConfig, {
+      operationType: metadata.operationType || "create",
+      attemptNumber: attempt + 1,
+    });
     if (lastResult) return true;
     if (attempt < retries) {
       addDiagnostic(`${label}.retry_wait`, { delayMs });
@@ -671,10 +697,8 @@ async function runTestById(test, expectedText) {
     case "rerun-update-stability": {
       const firstPass = `${expectedText} (1/2)`;
       const secondPass = `${expectedText} (2/2)`;
-
-      addDiagnostic("rerun.stability.strategy", "Using textContainerUpgrade to update existing container IDs instead of recreating startup containers.");
-
-      const runOne = await probeTextContainerUpgradeWithRetry({
+      const previousTestId = getPreviousTestId(test.id);
+      const firstUpdatePayload = {
         containerTotalNum: 2,
         textObject: [
           {
@@ -696,12 +720,8 @@ async function runTestById(test, expectedText) {
             content: "Update marker",
           },
         ],
-      }, 3, 600);
-
-      addDiagnostic("rerun.stability.pause_before_second_pass", { delayMs: 250 });
-      await sleep(250);
-
-      const runTwo = await probeTextContainerUpgradeWithRetry({
+      };
+      const secondUpdatePayload = {
         containerTotalNum: 2,
         textObject: [
           {
@@ -723,9 +743,41 @@ async function runTestById(test, expectedText) {
             content: "Update marker",
           },
         ],
-      }, 3, 600);
+      };
 
-      const startupCreated = runOne && runTwo;
+      addDiagnostic("rerun.lifecycle.precheck", {
+        currentTestId: test.id,
+        previousTestWasStartupMultiContainer: previousTestId === "startup-multi-container",
+        build: {
+          tag: state.buildCheck.loadedTag || APP_DIAGNOSTIC_TAG,
+          freshness: state.buildCheck.isFresh,
+        },
+      });
+
+      addDiagnostic("rerun.stability.strategy", "Using two non-empty containers to avoid payload validation failures from blank container updates.");
+
+      const runOne = await probeCreateStartupWithRetry(firstUpdatePayload, 3, 600, { operationType: "upgrade" });
+
+      addDiagnostic("rerun.stability.pause_before_second_pass", { delayMs: 250 });
+      await sleep(250);
+
+      const runTwo = await probeCreateStartupWithRetry(secondUpdatePayload, 3, 600, { operationType: "rebuild" });
+
+      let startupCreated = runOne && runTwo;
+      if (!startupCreated) {
+        addDiagnostic("rerun.lifecycle.recovery_shutdown", {
+          reason: "At least one update call failed; attempting recovery flow.",
+          runOne,
+          runTwo,
+        });
+        await sleep(400);
+        addDiagnostic("rerun.lifecycle.recovery_recreate", {
+          operationType: "create",
+          payload: summarizePayload(secondUpdatePayload),
+        });
+        const recoveryResult = await probeCreateStartupWithRetry(secondUpdatePayload, 1, 600, { operationType: "create" });
+        startupCreated = recoveryResult;
+      }
       return {
         startupCreated,
         lookFor: [secondPass, "Update marker"],

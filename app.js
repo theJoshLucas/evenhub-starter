@@ -135,6 +135,13 @@ const state = {
   rerunStability: {
     consecutivePasses: 0,
   },
+  startupGate: {
+    idsMatch: false,
+    localBuildId: "unknown",
+    latestBuildId: "unknown",
+    reason: "Not checked yet",
+    checkedAt: "",
+  },
 };
 
 function isoNow() {
@@ -310,6 +317,15 @@ function summarizePayload(payloadConfig) {
 }
 
 function setBuildStatusUI() {
+  if (!state.startupGate.idsMatch) {
+    ui.buildStatus.hidden = false;
+    ui.buildStatus.textContent = "Stale build loaded; auto-refreshing,";
+    ui.buildStatus.className = "status err";
+    ui.btnRefreshBuild.hidden = true;
+    ui.btnRunTest.disabled = true;
+    return;
+  }
+
   const check = state.buildCheck;
   ui.buildStatus.hidden = false;
 
@@ -325,6 +341,78 @@ function setBuildStatusUI() {
   ui.buildStatus.className = "status err";
   ui.btnRefreshBuild.hidden = false;
   ui.btnRunTest.disabled = true;
+}
+
+async function readBuildMeta(url, fetchOptions) {
+  const resp = await fetch(url, fetchOptions);
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
+
+  const meta = await resp.json();
+  const buildId = typeof meta?.build_id === "string" ? meta.build_id.trim() : "";
+  if (!buildId) {
+    throw new Error("build-meta.json is missing build_id.");
+  }
+
+  return meta;
+}
+
+function triggerAutoRefresh() {
+  ui.btnRunTest.disabled = true;
+  ui.btnRefreshBuild.hidden = true;
+  ui.buildStatus.hidden = false;
+  ui.buildStatus.textContent = "Stale build loaded; auto-refreshing,";
+  ui.buildStatus.className = "status err";
+  ui.runStatus.textContent = "Build is stale. Refreshing now...";
+  ui.runStatus.className = "status err";
+
+  window.setTimeout(() => {
+    window.location.replace(buildRefreshUrl());
+  }, 200);
+}
+
+async function enforceStartupGate() {
+  const cacheBust = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const latestUrl = `${BUILD_META_URL}?fresh=${encodeURIComponent(cacheBust)}`;
+
+  try {
+    const localMeta = await readBuildMeta(BUILD_META_URL, { cache: "default" });
+    const latestMeta = await readBuildMeta(latestUrl, { cache: "no-store" });
+    const localBuildId = String(localMeta.build_id).trim();
+    const latestBuildId = String(latestMeta.build_id).trim();
+    const idsMatch = localBuildId === latestBuildId;
+
+    state.startupGate = {
+      idsMatch,
+      localBuildId,
+      latestBuildId,
+      reason: idsMatch
+        ? "Loaded build matches latest build."
+        : `Loaded build_id ${localBuildId} does not match latest build_id ${latestBuildId}.`,
+      checkedAt: isoNow(),
+    };
+
+    addDiagnostic("build.startup_gate", state.startupGate);
+
+    if (!idsMatch) {
+      triggerAutoRefresh();
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    state.startupGate = {
+      idsMatch: false,
+      localBuildId: "unknown",
+      latestBuildId: "unknown",
+      reason: String(error),
+      checkedAt: isoNow(),
+    };
+    addDiagnostic("build.startup_gate", state.startupGate);
+    triggerAutoRefresh();
+    return false;
+  }
 }
 
 async function checkBuildFreshness() {
@@ -840,6 +928,11 @@ async function runTestById(test, expectedText) {
 }
 
 async function runTestFlow() {
+  if (!state.startupGate.idsMatch) {
+    triggerAutoRefresh();
+    return;
+  }
+
   resetDiagnostics();
   await checkBuildFreshness();
   if (!state.buildCheck.isFresh) {
@@ -1113,6 +1206,10 @@ ui.btnCopyPrompt.addEventListener("click", async () => {
 
 async function initializeApp() {
   resetPage1(false);
+  const startupGatePassed = await enforceStartupGate();
+  if (!startupGatePassed) {
+    return;
+  }
   await checkBuildFreshness();
 }
 

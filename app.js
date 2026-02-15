@@ -18,7 +18,6 @@ const ui = {
   btnRunTest: $("btnRunTest"),
   runStatus: $("runStatus"),
   buildStatus: $("buildStatus"),
-  btnRefreshBuild: $("btnRefreshBuild"),
   btnYes: $("btnYes"),
   btnNo: $("btnNo"),
   btnNotSure: $("btnNotSure"),
@@ -316,14 +315,12 @@ function setBuildStatusUI() {
   if (check.isFresh) {
     ui.buildStatus.textContent = `Build metadata loaded. Build ID: ${check.buildId} (git ${check.gitSha}).`;
     ui.buildStatus.className = "status ok";
-    ui.btnRefreshBuild.hidden = true;
     ui.btnRunTest.disabled = false;
     return;
   }
 
   ui.buildStatus.textContent = `Build metadata missing or invalid: ${check.reason}. Tests are blocked until build-meta.json is available.`;
   ui.buildStatus.className = "status err";
-  ui.btnRefreshBuild.hidden = false;
   ui.btnRunTest.disabled = true;
 }
 
@@ -374,10 +371,69 @@ async function checkBuildFreshness() {
   return state.buildCheck;
 }
 
-function buildRefreshUrl() {
-  const next = new URL(window.location.href);
-  next.searchParams.set("fresh", Date.now().toString());
-  return next.toString();
+function randomNonce() {
+  try {
+    const bytes = new Uint8Array(8);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return Math.random().toString(36).slice(2);
+  }
+}
+
+function buildComputedRuntimeUrl(buildId, baseHref = window.location.href) {
+  const next = new URL(baseHref);
+  next.searchParams.set("build_id", buildId);
+
+  if (!next.searchParams.get("nonce")) {
+    next.searchParams.set("nonce", randomNonce());
+  }
+
+  if (!next.searchParams.get("ts")) {
+    next.searchParams.set("ts", Date.now().toString());
+  }
+
+  return next;
+}
+
+function renderQrForCurrentUrl() {
+  const qrHost = document.getElementById("qrCode");
+  const qrValue = document.getElementById("qrValue");
+  const currentUrl = window.location.href;
+
+  if (qrValue) {
+    qrValue.textContent = currentUrl;
+  }
+
+  if (!qrHost || typeof QRCode !== "function") {
+    return;
+  }
+
+  qrHost.innerHTML = "";
+  new QRCode(qrHost, {
+    text: currentUrl,
+    width: 200,
+    height: 200,
+  });
+}
+
+function syncRuntimeUrl(buildId) {
+  const current = new URL(window.location.href);
+  const next = buildComputedRuntimeUrl(buildId, current.toString());
+  const currentBuildId = current.searchParams.get("build_id");
+  const nextHref = next.toString();
+
+  if (currentBuildId !== buildId) {
+    window.location.replace(nextHref);
+    return false;
+  }
+
+  if (nextHref !== current.toString()) {
+    window.history.replaceState({}, "", nextHref);
+  }
+
+  renderQrForCurrentUrl();
+  return true;
 }
 
 function buildFingerprintLines(run) {
@@ -843,7 +899,7 @@ async function runTestFlow() {
   resetDiagnostics();
   await checkBuildFreshness();
   if (!state.buildCheck.isFresh) {
-    ui.runStatus.textContent = `Blocked: cannot run tests until build metadata is loaded (${state.buildCheck.reason}). Tap 'Refresh to Latest Build' after deploy.`;
+    ui.runStatus.textContent = `Blocked: cannot run tests until build metadata is loaded (${state.buildCheck.reason}).`;
     ui.runStatus.className = "status err";
     return;
   }
@@ -1099,9 +1155,6 @@ ui.btnDebug.addEventListener("click", () => {
   ui.debugWrap.hidden = false;
   ui.debugPrompt.textContent = buildDebugPrompt();
 });
-ui.btnRefreshBuild.addEventListener("click", () => {
-  window.location.replace(buildRefreshUrl());
-});
 ui.btnCopyPrompt.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(ui.debugPrompt.textContent);
@@ -1113,7 +1166,9 @@ ui.btnCopyPrompt.addEventListener("click", async () => {
 
 async function initializeApp() {
   resetPage1(false);
-  await checkBuildFreshness();
+  const check = await checkBuildFreshness();
+  if (!check.isFresh) return;
+  syncRuntimeUrl(check.buildId);
 }
 
 initializeApp();

@@ -70,17 +70,15 @@ What you should see:
 4. The demo will auto-try `createStartUpPageContainer()` up to 3 times with a short delay.
 
 ## Guided recommended loop (default)
-Why this exists: Even Hub WebView can cache aggressively, so scanning the same old QR may open stale code. The top section keeps a repeatable test path with status chips for each step.
+Why this exists: the app now auto-generates a runtime URL fingerprint (`build_id`, `nonce`, `ts`) on load, so the QR target always points to the active build without manual refresh steps.
 
-1. Click **Generate Fresh QR** (cache-busted URL is shown under the button).
+1. Open the hosted URL in Even runtime.
 2. Click **Boot / Reconnect**.
 3. Click **Run Hello World Demo**.
 4. Record confirmation in **Developer Journal** with outcome + notes.
 
-Important: each generated QR is effectively single-use for testing because it is tied to one timestamped URL.
-
 ## Smallest reproducible hello-world (core integration)
-1. Launch in Even runtime from a freshly generated QR URL.
+1. Launch in Even runtime from the hosted URL (the app auto-updates URL fingerprinting on load).
 2. Click **Run Hello World Demo**.
 3. Wait for up to 3 startup-create attempts (about ~3-5 seconds total).
 4. Check status + matrix output (`helloWorldDemo.ok` and `createStartUpPageContainer.ok`).

@@ -13,7 +13,7 @@ Two tracks:
 1. **Mobile-first redesign**
    - cleaner typography, tighter spacing, smaller consistent buttons.
 2. **Guided recommended loop**
-   - top-of-page numbered flow: Generate QR -> Boot/Reconnect -> Hello World -> Record confirmation.
+   - top-of-page numbered flow: Auto URL fingerprint check -> Boot/Reconnect -> Hello World -> Record confirmation.
    - each step has not-run / running / success / failed state.
 3. **Advanced probe containment**
    - probe buttons moved into collapsed Advanced panel.

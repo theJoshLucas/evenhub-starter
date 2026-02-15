@@ -17,6 +17,8 @@ const ui = {
   btnPrevTest: $("btnPrevTest"),
   btnRunTest: $("btnRunTest"),
   runStatus: $("runStatus"),
+  buildStatus: $("buildStatus"),
+  btnRefreshBuild: $("btnRefreshBuild"),
   btnYes: $("btnYes"),
   btnNo: $("btnNo"),
   btnNotSure: $("btnNotSure"),
@@ -35,6 +37,7 @@ const ui = {
 
 const GITHUB_EXPORT_SETTINGS_KEY = "starterKit.githubExportSettings.v1";
 const TEST_COUNTER_KEY = "starterKit.testCounter.v1";
+const APP_DIAGNOSTIC_TAG = "diag-v6-payload-normalization";
 
 const TESTS = [
   {
@@ -116,6 +119,17 @@ const state = {
   currentTest: null,
   activeRun: null,
   expectedText: "",
+  diagnostics: [],
+  lastRunStatusMessage: "",
+  lastAutomationError: "",
+  githubRecentRuns: [],
+  buildCheck: {
+    loadedTag: APP_DIAGNOSTIC_TAG,
+    latestTag: "",
+    isFresh: true,
+    reason: "Not checked yet",
+    checkedAt: "",
+  },
 };
 
 function isoNow() {
@@ -190,6 +204,38 @@ async function getFileSha(owner, repo, branch, path, token) {
   return data.sha || null;
 }
 
+async function fetchRecentGitHubRunFiles(limit = 5) {
+  const settings = loadGitHubExportSettings();
+  if (!settings) return { ok: false, reason: "GitHub settings/token not found in local storage.", files: [] };
+
+  const ownerRepo = parseOwnerRepo(settings.repo);
+  if (!ownerRepo) return { ok: false, reason: "GitHub repo format must be owner/repo.", files: [] };
+
+  const url = `https://api.github.com/repos/${ownerRepo.owner}/${ownerRepo.repo}/contents/testing/runs?ref=${encodeURIComponent(settings.branch)}`;
+  const resp = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${settings.token}`,
+      Accept: "application/vnd.github+json",
+    },
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    return { ok: false, reason: `Failed listing runs (${resp.status}): ${text}`, files: [] };
+  }
+
+  const data = await resp.json();
+  const files = Array.isArray(data)
+    ? data
+      .filter((entry) => entry?.type === "file" && typeof entry?.name === "string")
+      .map((entry) => entry.name)
+      .sort((a, b) => b.localeCompare(a))
+      .slice(0, limit)
+    : [];
+
+  return { ok: true, reason: "", files };
+}
+
 async function commitRunToGitHub(filename, content) {
   const settings = loadGitHubExportSettings();
   if (!settings) throw new Error("GitHub settings/token not found in local storage.");
@@ -230,6 +276,123 @@ function sanitizeFileText(text) {
   return text.toLowerCase().replace(/[^a-z0-9\-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
 
+function resetDiagnostics() {
+  state.diagnostics = [];
+  state.lastRunStatusMessage = "";
+  state.lastAutomationError = "";
+  state.githubRecentRuns = [];
+}
+
+function addDiagnostic(step, details) {
+  state.diagnostics.push({ at: isoNow(), step, details });
+}
+
+function summarizePayload(payloadConfig) {
+  const textObject = Array.isArray(payloadConfig?.textObject) ? payloadConfig.textObject : [];
+  return {
+    containerTotalNum: payloadConfig?.containerTotalNum,
+    textObject: textObject.map((item) => ({
+      containerID: item.containerID,
+      containerName: item.containerName,
+      xPosition: item.xPosition,
+      yPosition: item.yPosition,
+      width: item.width,
+      height: item.height,
+      contentPreview: String(item.content ?? "").slice(0, 48),
+      contentLength: String(item.content ?? "").length,
+    })),
+  };
+}
+
+function setBuildStatusUI() {
+  const check = state.buildCheck;
+  ui.buildStatus.hidden = false;
+
+  if (check.isFresh) {
+    ui.buildStatus.textContent = `Build check OK. Running tag: ${check.loadedTag}.`;
+    ui.buildStatus.className = "status ok";
+    ui.btnRefreshBuild.hidden = true;
+    ui.btnRunTest.disabled = false;
+    return;
+  }
+
+  ui.buildStatus.textContent = `This page is using an old cached build (${check.loadedTag}). Latest is ${check.latestTag || "unknown"}. Tap refresh to load latest before testing.`;
+  ui.buildStatus.className = "status err";
+  ui.btnRefreshBuild.hidden = false;
+  ui.btnRunTest.disabled = true;
+}
+
+function extractDiagnosticTag(sourceText) {
+  const match = sourceText.match(/const APP_DIAGNOSTIC_TAG = "([^"]+)";/);
+  return match?.[1] || "";
+}
+
+async function checkBuildFreshness() {
+  const cacheBust = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const url = `./app.js?fresh=${encodeURIComponent(cacheBust)}`;
+
+  try {
+    const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) {
+      state.buildCheck = {
+        ...state.buildCheck,
+        latestTag: "",
+        isFresh: true,
+        reason: `Skipped strict check: unable to fetch latest app.js (${resp.status}).`,
+        checkedAt: isoNow(),
+      };
+      addDiagnostic("build.check", state.buildCheck);
+      setBuildStatusUI();
+      return state.buildCheck;
+    }
+
+    const text = await resp.text();
+    const latestTag = extractDiagnosticTag(text);
+    const loadedTag = APP_DIAGNOSTIC_TAG;
+    const isFresh = !!latestTag && latestTag === loadedTag;
+
+    state.buildCheck = {
+      loadedTag,
+      latestTag,
+      isFresh,
+      reason: isFresh
+        ? "Loaded build matches latest app.js."
+        : "Loaded build is stale compared to latest app.js.",
+      checkedAt: isoNow(),
+    };
+    addDiagnostic("build.check", state.buildCheck);
+  } catch (error) {
+    state.buildCheck = {
+      ...state.buildCheck,
+      latestTag: "",
+      isFresh: true,
+      reason: `Skipped strict check due to network/runtime error: ${String(error)}`,
+      checkedAt: isoNow(),
+    };
+    addDiagnostic("build.check", state.buildCheck);
+  }
+
+  setBuildStatusUI();
+  return state.buildCheck;
+}
+
+function buildRefreshUrl() {
+  const next = new URL(window.location.href);
+  next.searchParams.set("fresh", Date.now().toString());
+  return next.toString();
+}
+
+function buildFingerprintLines(run) {
+  const check = run?.buildCheck || state.buildCheck;
+  return [
+    `- app_diagnostic_tag: ${run?.appDiagnosticTag || APP_DIAGNOSTIC_TAG}`,
+    `- latest_app_js_tag: ${check.latestTag || "unknown"}`,
+    `- build_is_fresh: ${check.isFresh}`,
+    `- build_check_reason: ${check.reason || "(none)"}`,
+    "- rerun_strategy: two-container non-empty update payload",
+  ];
+}
+
 function buildRunMarkdown(run) {
   return [
     `# Test Run: ${run.testTitle}`,
@@ -239,6 +402,11 @@ function buildRunMarkdown(run) {
     `- result: ${run.result}`,
     `- answer: ${run.answer}`,
     `- startup_created: ${run.startupCreated}`,
+    `- app_diagnostic_tag: ${run.appDiagnosticTag || APP_DIAGNOSTIC_TAG}`,
+    `- latest_app_js_tag: ${run.buildCheck?.latestTag || "unknown"}`,
+    `- build_is_fresh: ${run.buildCheck?.isFresh ?? true}`,
+    `- run_status_message: ${run.statusMessage || "(none)"}`,
+    ...(run.automationError ? [`- automation_error: ${run.automationError}`] : []),
     "",
     "## Goal",
     run.goal,
@@ -246,6 +414,16 @@ function buildRunMarkdown(run) {
     "## Expected on glasses",
     ...run.lookFor.map((line) => `- ${line}`),
     ...(run.layoutHint ? ["", "## Expected layout", run.layoutHint] : []),
+    "",
+    "## GitHub recent run files (before save)",
+    ...(Array.isArray(run.githubRecentRuns) && run.githubRecentRuns.length
+      ? run.githubRecentRuns.map((line) => `- ${line}`)
+      : ["- (not available)"]),
+    "",
+    "## Diagnostics",
+    ...(Array.isArray(run.diagnostics) && run.diagnostics.length
+      ? run.diagnostics.map((entry) => `- [${entry.at}] ${entry.step}: ${typeof entry.details === "string" ? entry.details : JSON.stringify(entry.details)}`)
+      : ["- (none)"]),
     "",
     "## Notes",
     run.notes || "(none)",
@@ -297,12 +475,36 @@ async function probeCreateStartup(expectedText) {
   return probeCreateStartupWithPayload(payload);
 }
 
+function normalizeStartupPayload(payloadConfig) {
+  const normalized = {
+    ...payloadConfig,
+    textObject: Array.isArray(payloadConfig?.textObject) ? payloadConfig.textObject : [],
+  };
+
+  const expectedCount = normalized.textObject.length;
+  if (normalized.containerTotalNum !== expectedCount) {
+    addDiagnostic("createStartUpPageContainer.normalized", {
+      reason: "containerTotalNum did not match textObject length",
+      originalContainerTotalNum: normalized.containerTotalNum,
+      normalizedContainerTotalNum: expectedCount,
+    });
+    normalized.containerTotalNum = expectedCount;
+  }
+
+  return normalized;
+}
+
 async function probeCreateStartupWithPayload(payloadConfig) {
+  const normalizedPayloadConfig = normalizeStartupPayload(payloadConfig);
+  const payloadSummary = summarizePayload(normalizedPayloadConfig);
+  addDiagnostic("createStartUpPageContainer.request", payloadSummary);
   const bridge = await ensureBridge();
   const { CreateStartUpPageContainer } = state.SDK;
-  const payload = new CreateStartUpPageContainer(payloadConfig);
+  const payload = new CreateStartUpPageContainer(normalizedPayloadConfig);
   const result = await bridge.createStartUpPageContainer(payload);
-  return result === 0 || result === "0";
+  const success = result === 0 || result === "0";
+  addDiagnostic("createStartUpPageContainer.response", { success, rawResult: result });
+  return success;
 }
 
 function sleep(ms) {
@@ -312,9 +514,13 @@ function sleep(ms) {
 async function probeCreateStartupWithRetry(payloadConfig, retries = 1, delayMs = 250) {
   let lastResult = false;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
+    addDiagnostic("createStartUpPageContainer.attempt", { attempt: attempt + 1, totalAttempts: retries + 1 });
     lastResult = await probeCreateStartupWithPayload(payloadConfig);
     if (lastResult) return true;
-    if (attempt < retries) await sleep(delayMs);
+    if (attempt < retries) {
+      addDiagnostic("createStartUpPageContainer.retry_wait", { delayMs });
+      await sleep(delayMs);
+    }
   }
   return lastResult;
 }
@@ -334,8 +540,8 @@ function getPreviewForTest(test, expectedText) {
 
   if (test.id === "rerun-update-stability") {
     return {
-      lines: [`${expectedText} (2/2)`],
-      layoutHint: "Expected layout: only one visible line from this test. Previous Block A/Block B text should be replaced.",
+      lines: [`${expectedText} (2/2)`, "Update marker"],
+      layoutHint: "Expected layout: this test may show two lines while replacing previous Block A/Block B content.",
     };
   }
 
@@ -428,6 +634,8 @@ async function runTestById(test, expectedText) {
       const firstPass = `${expectedText} (1/2)`;
       const secondPass = `${expectedText} (2/2)`;
 
+      addDiagnostic("rerun.stability.strategy", "Using two non-empty containers to avoid payload validation failures from blank container updates.");
+
       const runOne = await probeCreateStartupWithRetry({
         containerTotalNum: 2,
         textObject: [
@@ -437,7 +645,7 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 80,
             containerID: 1,
-            containerName: "stability-a",
+            containerName: "multi-a",
             content: firstPass,
           },
           {
@@ -446,11 +654,14 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 80,
             containerID: 2,
-            containerName: "stability-b",
-            content: "",
+            containerName: "multi-b",
+            content: "Update marker",
           },
         ],
-      }, 1, 300);
+      }, 3, 600);
+
+      addDiagnostic("rerun.stability.pause_before_second_pass", { delayMs: 250 });
+      await sleep(250);
 
       const runTwo = await probeCreateStartupWithRetry({
         containerTotalNum: 2,
@@ -461,7 +672,7 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 80,
             containerID: 1,
-            containerName: "stability-a",
+            containerName: "multi-a",
             content: secondPass,
           },
           {
@@ -470,20 +681,20 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 80,
             containerID: 2,
-            containerName: "stability-b",
-            content: "",
+            containerName: "multi-b",
+            content: "Update marker",
           },
         ],
-      }, 1, 300);
+      }, 3, 600);
 
       const startupCreated = runOne && runTwo;
       return {
         startupCreated,
-        lookFor: [secondPass],
-        layoutHint: "Expected layout: only one visible line from this test. Previous Block A/Block B text should be replaced.",
+        lookFor: [secondPass, "Update marker"],
+        layoutHint: "Expected layout: this test may show two lines while replacing previous Block A/Block B content.",
         statusMessage: startupCreated
-          ? "Sent two updates in sequence. Confirm the latest text replaced older multi-container text."
-          : "At least one update returned an error code. Continue with your observation.",
+          ? "Sent two updates in sequence. Confirm both old Block A/Block B lines were replaced."
+          : `At least one update returned an error code (pass1=${runOne}, pass2=${runTwo}). Continue with your observation.`,
       };
     }
     case "intentional-bad-payload": {
@@ -540,7 +751,16 @@ async function runTestById(test, expectedText) {
 }
 
 async function runTestFlow() {
+  resetDiagnostics();
+  await checkBuildFreshness();
+  if (!state.buildCheck.isFresh) {
+    ui.runStatus.textContent = "Blocked: app build is stale. Tap 'Refresh to Latest Build' first.";
+    ui.runStatus.className = "status err";
+    return;
+  }
+
   const test = state.currentTest;
+  addDiagnostic("test.start", { testId: test.id, testTitle: test.title });
   const preview = getPreviewForTest(test, state.expectedText);
   ui.lookForViewerPage2.textContent = renderExpectedLines(preview.lines);
   ui.expectedLayoutPage2.textContent = preview.layoutHint;
@@ -561,9 +781,15 @@ async function runTestFlow() {
     ui.expectedLayoutPage2.textContent = layoutHint;
     ui.expectedLayoutPage2.hidden = !layoutHint;
     ui.runStatus.textContent = result.statusMessage;
+    state.lastRunStatusMessage = result.statusMessage;
+    addDiagnostic("test.status", result.statusMessage);
   } catch (error) {
-    ui.runStatus.textContent = `Automation warning: ${String(error)}`;
+    const warning = `Automation warning: ${String(error)}`;
+    ui.runStatus.textContent = warning;
     ui.runStatus.className = "status err";
+    state.lastAutomationError = String(error);
+    state.lastRunStatusMessage = warning;
+    addDiagnostic("test.error", String(error));
   } finally {
     ui.btnRunTest.disabled = false;
   }
@@ -576,6 +802,12 @@ async function runTestFlow() {
     layoutHint,
     runAt: isoNow(),
     startupCreated,
+    appDiagnosticTag: APP_DIAGNOSTIC_TAG,
+    buildCheck: { ...state.buildCheck },
+    statusMessage: state.lastRunStatusMessage,
+    automationError: state.lastAutomationError,
+    diagnostics: [...state.diagnostics],
+    githubRecentRuns: [],
     answer: "",
     notes: "",
     result: "",
@@ -612,12 +844,23 @@ async function saveResult(answer) {
   state.activeRun.savedFile = filename;
 
   try {
+    const recentRuns = await fetchRecentGitHubRunFiles(5);
+    state.activeRun.githubRecentRuns = recentRuns.ok
+      ? recentRuns.files
+      : [`lookup_failed: ${recentRuns.reason}`];
+    addDiagnostic("github.recent_runs", state.activeRun.githubRecentRuns);
+    state.activeRun.diagnostics = [...state.diagnostics];
+
     const content = buildRunMarkdown(state.activeRun);
     await commitRunToGitHub(filename, content);
+    addDiagnostic("github.save", { success: true, filename });
+    state.activeRun.diagnostics = [...state.diagnostics];
     ui.confirmationTitle.textContent = `Saved successfully to testing/runs/${filename}`;
     ui.submitStatus.textContent = "";
     setPage(3);
   } catch (e) {
+    addDiagnostic("github.save", { success: false, error: String(e) });
+    state.activeRun.diagnostics = [...state.diagnostics];
     ui.submitStatus.textContent = `Save failed: ${String(e)}`;
     ui.submitStatus.className = "status err";
   }
@@ -626,8 +869,22 @@ async function saveResult(answer) {
 function buildDebugPrompt() {
   const run = state.activeRun;
   const summary = run
-    ? `- Test: ${run.testTitle}\n- Result selected by human: ${run.answer}\n- Notes: ${run.notes || "(none)"}\n- Startup call success: ${run.startupCreated}`
+    ? `- Test: ${run.testTitle}
+- Result selected by human: ${run.answer}
+- Notes: ${run.notes || "(none)"}
+- Startup call success: ${run.startupCreated}
+- Run status message: ${run.statusMessage || "(none)"}${run.automationError ? `\n- Automation error: ${run.automationError}` : ""}`
     : "- No run data found.";
+
+  const diagLines = run?.diagnostics?.length
+    ? run.diagnostics.map((entry) => `- [${entry.at}] ${entry.step}: ${typeof entry.details === "string" ? entry.details : JSON.stringify(entry.details)}`)
+    : ["- (none)"];
+
+  const runtimeLines = buildFingerprintLines(run);
+
+  const recentRunLines = run?.githubRecentRuns?.length
+    ? run.githubRecentRuns.map((line) => `- ${line}`)
+    : ["- (not available)"];
 
   return [
     "# Debug Request for Follow-up Test",
@@ -640,12 +897,22 @@ function buildDebugPrompt() {
     "## What happened",
     summary,
     "",
+    "## Recent GitHub test files",
+    ...recentRunLines,
+    "",
+    "## Runtime fingerprint",
+    ...runtimeLines,
+    "",
+    "## Detailed diagnostics",
+    ...diagLines,
+    "",
     "## What I need from you",
     "1. Explain the likely root cause in plain English.",
     "2. Either implement a fix if you're confident you can solve the problem, or suggest the next course of action.",
     "",
   ].join("\n");
 }
+
 
 function resetPage1(advanceCounter) {
   if (advanceCounter) bumpCounter();
@@ -676,6 +943,7 @@ function resetPage1(advanceCounter) {
   ui.debugWrap.hidden = true;
   ui.debugPrompt.textContent = "";
   setPage(1);
+  setBuildStatusUI();
 }
 
 ui.btnRunTest.addEventListener("click", runTestFlow);
@@ -711,6 +979,9 @@ ui.btnDebug.addEventListener("click", () => {
   ui.debugWrap.hidden = false;
   ui.debugPrompt.textContent = buildDebugPrompt();
 });
+ui.btnRefreshBuild.addEventListener("click", () => {
+  window.location.replace(buildRefreshUrl());
+});
 ui.btnCopyPrompt.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(ui.debugPrompt.textContent);
@@ -720,4 +991,9 @@ ui.btnCopyPrompt.addEventListener("click", async () => {
   }
 });
 
-resetPage1(false);
+async function initializeApp() {
+  resetPage1(false);
+  await checkBuildFreshness();
+}
+
+initializeApp();

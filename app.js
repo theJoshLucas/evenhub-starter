@@ -617,7 +617,7 @@ async function runTestById(test, expectedText) {
       addDiagnostic("rerun.stability.strategy", "Using two non-empty containers to avoid payload validation failures from blank container updates.");
 
       const runOne = await probeCreateStartupWithRetry({
-        containerTotalNum: 2,
+        containerTotalNum: 1,
         textObject: [
           {
             xPosition: 0,
@@ -644,7 +644,7 @@ async function runTestById(test, expectedText) {
       await sleep(250);
 
       const runTwo = await probeCreateStartupWithRetry({
-        containerTotalNum: 2,
+        containerTotalNum: 1,
         textObject: [
           {
             xPosition: 0,

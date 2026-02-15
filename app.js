@@ -37,7 +37,7 @@ const ui = {
 
 const GITHUB_EXPORT_SETTINGS_KEY = "starterKit.githubExportSettings.v1";
 const TEST_COUNTER_KEY = "starterKit.testCounter.v1";
-const APP_DIAGNOSTIC_TAG = "diag-v4-auto-build-freshness-gate";
+const APP_DIAGNOSTIC_TAG = "diag-v5-rerun-two-container-nonempty";
 
 const TESTS = [
   {
@@ -389,7 +389,7 @@ function buildFingerprintLines(run) {
     `- latest_app_js_tag: ${check.latestTag || "unknown"}`,
     `- build_is_fresh: ${check.isFresh}`,
     `- build_check_reason: ${check.reason || "(none)"}`,
-    "- rerun_strategy: single-container (containerTotalNum=1)",
+    "- rerun_strategy: two-container non-empty update payload",
   ];
 }
 
@@ -520,8 +520,8 @@ function getPreviewForTest(test, expectedText) {
 
   if (test.id === "rerun-update-stability") {
     return {
-      lines: [`${expectedText} (2/2)`],
-      layoutHint: "Expected layout: only one visible line from this test. Previous Block A/Block B text should be replaced.",
+      lines: [`${expectedText} (2/2)`, "Update marker"],
+      layoutHint: "Expected layout: this test may show two lines while replacing previous Block A/Block B content.",
     };
   }
 
@@ -614,7 +614,7 @@ async function runTestById(test, expectedText) {
       const firstPass = `${expectedText} (1/2)`;
       const secondPass = `${expectedText} (2/2)`;
 
-      addDiagnostic("rerun.stability.strategy", "Using single-container updates to avoid SDK rejection from blank/whitespace secondary containers.");
+      addDiagnostic("rerun.stability.strategy", "Using two non-empty containers to avoid payload validation failures from blank container updates.");
 
       const runOne = await probeCreateStartupWithRetry({
         containerTotalNum: 1,
@@ -625,8 +625,17 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 80,
             containerID: 1,
-            containerName: "rerun-a",
+            containerName: "multi-a",
             content: firstPass,
+          },
+          {
+            xPosition: 0,
+            yPosition: 90,
+            width: 480,
+            height: 80,
+            containerID: 2,
+            containerName: "multi-b",
+            content: "Update marker",
           },
         ],
       }, 3, 600);
@@ -643,8 +652,17 @@ async function runTestById(test, expectedText) {
             width: 480,
             height: 80,
             containerID: 1,
-            containerName: "rerun-a",
+            containerName: "multi-a",
             content: secondPass,
+          },
+          {
+            xPosition: 0,
+            yPosition: 90,
+            width: 480,
+            height: 80,
+            containerID: 2,
+            containerName: "multi-b",
+            content: "Update marker",
           },
         ],
       }, 3, 600);
@@ -652,8 +670,8 @@ async function runTestById(test, expectedText) {
       const startupCreated = runOne && runTwo;
       return {
         startupCreated,
-        lookFor: [secondPass],
-        layoutHint: "Expected layout: only one visible line from this test. Previous Block A/Block B text should be replaced.",
+        lookFor: [secondPass, "Update marker"],
+        layoutHint: "Expected layout: this test may show two lines while replacing previous Block A/Block B content.",
         statusMessage: startupCreated
           ? "Sent two updates in sequence. Confirm both old Block A/Block B lines were replaced."
           : `At least one update returned an error code (pass1=${runOne}, pass2=${runTwo}). Continue with your observation.`,

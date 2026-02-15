@@ -126,6 +126,8 @@ const state = {
     buildId: "unknown",
     gitSha: "unknown",
     builtAt: "unknown",
+    loadedUrl: "unknown",
+    freshnessCheckResult: "not_checked",
     appVersionTag: "unknown",
     isFresh: false,
     reason: "Not checked yet",
@@ -133,6 +135,13 @@ const state = {
   },
   rerunStability: {
     consecutivePasses: 0,
+  },
+  startupGate: {
+    idsMatch: false,
+    localBuildId: "unknown",
+    latestBuildId: "unknown",
+    reason: "Not checked yet",
+    checkedAt: "",
   },
 };
 
@@ -309,6 +318,15 @@ function summarizePayload(payloadConfig) {
 }
 
 function setBuildStatusUI() {
+  if (!state.startupGate.idsMatch) {
+    ui.buildStatus.hidden = false;
+    ui.buildStatus.textContent = "Stale build loaded; auto-refreshing,";
+    ui.buildStatus.className = "status err";
+    ui.btnRefreshBuild.hidden = true;
+    ui.btnRunTest.disabled = true;
+    return;
+  }
+
   const check = state.buildCheck;
   ui.buildStatus.hidden = false;
 
@@ -322,6 +340,78 @@ function setBuildStatusUI() {
   ui.buildStatus.textContent = `Build metadata missing or invalid: ${check.reason}. Tests are blocked until build-meta.json is available.`;
   ui.buildStatus.className = "status err";
   ui.btnRunTest.disabled = true;
+}
+
+async function readBuildMeta(url, fetchOptions) {
+  const resp = await fetch(url, fetchOptions);
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
+
+  const meta = await resp.json();
+  const buildId = typeof meta?.build_id === "string" ? meta.build_id.trim() : "";
+  if (!buildId) {
+    throw new Error("build-meta.json is missing build_id.");
+  }
+
+  return meta;
+}
+
+function triggerAutoRefresh() {
+  ui.btnRunTest.disabled = true;
+  ui.btnRefreshBuild.hidden = true;
+  ui.buildStatus.hidden = false;
+  ui.buildStatus.textContent = "Stale build loaded; auto-refreshing,";
+  ui.buildStatus.className = "status err";
+  ui.runStatus.textContent = "Build is stale. Refreshing now...";
+  ui.runStatus.className = "status err";
+
+  window.setTimeout(() => {
+    window.location.replace(buildRefreshUrl());
+  }, 200);
+}
+
+async function enforceStartupGate() {
+  const cacheBust = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const latestUrl = `${BUILD_META_URL}?fresh=${encodeURIComponent(cacheBust)}`;
+
+  try {
+    const localMeta = await readBuildMeta(BUILD_META_URL, { cache: "default" });
+    const latestMeta = await readBuildMeta(latestUrl, { cache: "no-store" });
+    const localBuildId = String(localMeta.build_id).trim();
+    const latestBuildId = String(latestMeta.build_id).trim();
+    const idsMatch = localBuildId === latestBuildId;
+
+    state.startupGate = {
+      idsMatch,
+      localBuildId,
+      latestBuildId,
+      reason: idsMatch
+        ? "Loaded build matches latest build."
+        : `Loaded build_id ${localBuildId} does not match latest build_id ${latestBuildId}.`,
+      checkedAt: isoNow(),
+    };
+
+    addDiagnostic("build.startup_gate", state.startupGate);
+
+    if (!idsMatch) {
+      triggerAutoRefresh();
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    state.startupGate = {
+      idsMatch: false,
+      localBuildId: "unknown",
+      latestBuildId: "unknown",
+      reason: String(error),
+      checkedAt: isoNow(),
+    };
+    addDiagnostic("build.startup_gate", state.startupGate);
+    triggerAutoRefresh();
+    return false;
+  }
 }
 
 async function checkBuildFreshness() {
@@ -348,6 +438,8 @@ async function checkBuildFreshness() {
       buildId,
       gitSha,
       builtAt,
+      loadedUrl: window.location.href,
+      freshnessCheckResult: "fresh",
       appVersionTag,
       isFresh: true,
       reason: "build-meta.json loaded successfully.",
@@ -359,6 +451,8 @@ async function checkBuildFreshness() {
       buildId: "missing",
       gitSha: "missing",
       builtAt: "missing",
+      loadedUrl: window.location.href,
+      freshnessCheckResult: "stale",
       appVersionTag: "missing",
       isFresh: false,
       reason: String(error),
@@ -442,6 +536,8 @@ function buildFingerprintLines(run) {
     `- build_id: ${run?.buildId || check.buildId || "unknown"}`,
     `- git_sha: ${check.gitSha || "unknown"}`,
     `- built_at: ${check.builtAt || "unknown"}`,
+    `- loaded_url: ${check.loadedUrl || window.location.href || "unknown"}`,
+    `- freshness_check_result: ${check.freshnessCheckResult || (check.isFresh ? "fresh" : "stale")}`,
     `- app_version_tag: ${check.appVersionTag || "unknown"}`,
     `- build_is_fresh: ${check.isFresh}`,
     `- build_check_reason: ${check.reason || "(none)"}`,
@@ -461,6 +557,8 @@ function buildRunMarkdown(run) {
     `- build_id: ${run.buildId || run.buildCheck?.buildId || "unknown"}`,
     `- git_sha: ${run.buildCheck?.gitSha || "unknown"}`,
     `- built_at: ${run.buildCheck?.builtAt || "unknown"}`,
+    `- loaded_url: ${run.buildCheck?.loadedUrl || window.location.href || "unknown"}`,
+    `- freshness_check_result: ${run.buildCheck?.freshnessCheckResult || ((run.buildCheck?.isFresh ?? true) ? "fresh" : "stale")}`,
     `- app_version_tag: ${run.buildCheck?.appVersionTag || "unknown"}`,
     `- build_is_fresh: ${run.buildCheck?.isFresh ?? true}`,
     `- run_status_message: ${run.statusMessage || "(none)"}`,
@@ -896,6 +994,11 @@ async function runTestById(test, expectedText) {
 }
 
 async function runTestFlow() {
+  if (!state.startupGate.idsMatch) {
+    triggerAutoRefresh();
+    return;
+  }
+
   resetDiagnostics();
   await checkBuildFreshness();
   if (!state.buildCheck.isFresh) {
@@ -974,6 +1077,15 @@ async function runTestFlow() {
     result: "",
     savedFile: "",
   };
+
+  addDiagnostic("run.audit", {
+    build_id: state.activeRun.buildCheck?.buildId || "unknown",
+    git_sha: state.activeRun.buildCheck?.gitSha || "unknown",
+    built_at: state.activeRun.buildCheck?.builtAt || "unknown",
+    loaded_url: state.activeRun.buildCheck?.loadedUrl || window.location.href || "unknown",
+    freshness_check_result: state.activeRun.buildCheck?.freshnessCheckResult || (state.activeRun.buildCheck?.isFresh ? "fresh" : "stale"),
+  });
+  state.activeRun.diagnostics = [...state.diagnostics];
 
   ui.submitStatus.textContent = "";
   ui.detailsWrap.hidden = true;

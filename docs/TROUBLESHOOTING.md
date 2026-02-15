@@ -39,8 +39,6 @@ Fixes:
 Cause: WebView cache reused an older page load.
 
 Fixes:
-1. click **Generate QR for Glasses Test** to create a new cache-busted URL
-2. verify the `cb=` value and timestamp changed
-3. scan the newly generated QR only (do not reuse old screenshots)
-
-Note: each QR is intended to be single-use in this testing workflow.
+1. fully close and reopen the Even runtime view
+2. confirm URL now includes `build_id`, `nonce`, and `ts` query params
+3. if build changed, app should auto-rewrite the URL to the latest `build_id` on load

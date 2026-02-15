@@ -127,6 +127,8 @@ const state = {
     buildId: "unknown",
     gitSha: "unknown",
     builtAt: "unknown",
+    loadedUrl: "unknown",
+    freshnessCheckResult: "not_checked",
     appVersionTag: "unknown",
     isFresh: false,
     reason: "Not checked yet",
@@ -439,6 +441,8 @@ async function checkBuildFreshness() {
       buildId,
       gitSha,
       builtAt,
+      loadedUrl: window.location.href,
+      freshnessCheckResult: "fresh",
       appVersionTag,
       isFresh: true,
       reason: "build-meta.json loaded successfully.",
@@ -450,6 +454,8 @@ async function checkBuildFreshness() {
       buildId: "missing",
       gitSha: "missing",
       builtAt: "missing",
+      loadedUrl: window.location.href,
+      freshnessCheckResult: "stale",
       appVersionTag: "missing",
       isFresh: false,
       reason: String(error),
@@ -474,6 +480,8 @@ function buildFingerprintLines(run) {
     `- build_id: ${run?.buildId || check.buildId || "unknown"}`,
     `- git_sha: ${check.gitSha || "unknown"}`,
     `- built_at: ${check.builtAt || "unknown"}`,
+    `- loaded_url: ${check.loadedUrl || window.location.href || "unknown"}`,
+    `- freshness_check_result: ${check.freshnessCheckResult || (check.isFresh ? "fresh" : "stale")}`,
     `- app_version_tag: ${check.appVersionTag || "unknown"}`,
     `- build_is_fresh: ${check.isFresh}`,
     `- build_check_reason: ${check.reason || "(none)"}`,
@@ -493,6 +501,8 @@ function buildRunMarkdown(run) {
     `- build_id: ${run.buildId || run.buildCheck?.buildId || "unknown"}`,
     `- git_sha: ${run.buildCheck?.gitSha || "unknown"}`,
     `- built_at: ${run.buildCheck?.builtAt || "unknown"}`,
+    `- loaded_url: ${run.buildCheck?.loadedUrl || window.location.href || "unknown"}`,
+    `- freshness_check_result: ${run.buildCheck?.freshnessCheckResult || ((run.buildCheck?.isFresh ?? true) ? "fresh" : "stale")}`,
     `- app_version_tag: ${run.buildCheck?.appVersionTag || "unknown"}`,
     `- build_is_fresh: ${run.buildCheck?.isFresh ?? true}`,
     `- run_status_message: ${run.statusMessage || "(none)"}`,
@@ -1011,6 +1021,15 @@ async function runTestFlow() {
     result: "",
     savedFile: "",
   };
+
+  addDiagnostic("run.audit", {
+    build_id: state.activeRun.buildCheck?.buildId || "unknown",
+    git_sha: state.activeRun.buildCheck?.gitSha || "unknown",
+    built_at: state.activeRun.buildCheck?.builtAt || "unknown",
+    loaded_url: state.activeRun.buildCheck?.loadedUrl || window.location.href || "unknown",
+    freshness_check_result: state.activeRun.buildCheck?.freshnessCheckResult || (state.activeRun.buildCheck?.isFresh ? "fresh" : "stale"),
+  });
+  state.activeRun.diagnostics = [...state.diagnostics];
 
   ui.submitStatus.textContent = "";
   ui.detailsWrap.hidden = true;

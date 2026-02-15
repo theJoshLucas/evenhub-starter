@@ -37,7 +37,7 @@ const ui = {
 
 const GITHUB_EXPORT_SETTINGS_KEY = "starterKit.githubExportSettings.v1";
 const TEST_COUNTER_KEY = "starterKit.testCounter.v1";
-const APP_DIAGNOSTIC_TAG = "diag-v5-rerun-two-container-nonempty";
+const APP_DIAGNOSTIC_TAG = "diag-v6-payload-normalization";
 
 const TESTS = [
   {
@@ -475,12 +475,32 @@ async function probeCreateStartup(expectedText) {
   return probeCreateStartupWithPayload(payload);
 }
 
+function normalizeStartupPayload(payloadConfig) {
+  const normalized = {
+    ...payloadConfig,
+    textObject: Array.isArray(payloadConfig?.textObject) ? payloadConfig.textObject : [],
+  };
+
+  const expectedCount = normalized.textObject.length;
+  if (normalized.containerTotalNum !== expectedCount) {
+    addDiagnostic("createStartUpPageContainer.normalized", {
+      reason: "containerTotalNum did not match textObject length",
+      originalContainerTotalNum: normalized.containerTotalNum,
+      normalizedContainerTotalNum: expectedCount,
+    });
+    normalized.containerTotalNum = expectedCount;
+  }
+
+  return normalized;
+}
+
 async function probeCreateStartupWithPayload(payloadConfig) {
-  const payloadSummary = summarizePayload(payloadConfig);
+  const normalizedPayloadConfig = normalizeStartupPayload(payloadConfig);
+  const payloadSummary = summarizePayload(normalizedPayloadConfig);
   addDiagnostic("createStartUpPageContainer.request", payloadSummary);
   const bridge = await ensureBridge();
   const { CreateStartUpPageContainer } = state.SDK;
-  const payload = new CreateStartUpPageContainer(payloadConfig);
+  const payload = new CreateStartUpPageContainer(normalizedPayloadConfig);
   const result = await bridge.createStartUpPageContainer(payload);
   const success = result === 0 || result === "0";
   addDiagnostic("createStartUpPageContainer.response", { success, rawResult: result });

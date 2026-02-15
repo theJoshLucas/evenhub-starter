@@ -1,6 +1,20 @@
 # Even Hub Starter Kit (Probe + Template)
 
+## Current Phase
+- **Now:** SDK validation
+- **Next:** Mic capture + transcript
+- **Later:** Intent routing + HUD cards
+
 Zero-build, GitHub-Pages-friendly starter kit for validating Even Hub SDK behavior on real hardware.
+
+## Primary goal and tracks
+**Primary goal:** learn the Even SDK enough to build a **Conversate replacement plugin**.
+
+This repo’s probe harness is a **temporary learning tool**, not the final product.
+
+We are running two tracks:
+1. **SDK validation track (current harness):** test bridge + SDK behavior on real hardware, record what works, and reduce unknowns.
+2. **Conversate+ build track:** build mic input → transcript → card output flow after SDK basics are validated.
 
 ## What this project is
 This repo is a **developer probe harness**, not a polished user product yet.

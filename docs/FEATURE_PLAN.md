@@ -1,5 +1,14 @@
 # Feature Plan (Phase 3: mobile-first testing UX)
 
+## Primary goal and two-track execution
+**Primary goal:** learn the Even SDK enough to build a **Conversate replacement plugin**.
+
+The current probe harness is a **temporary learning tool**, not the final shipped product.
+
+Two tracks:
+1. **SDK validation track (current harness):** confirm SDK/runtime behavior and capture reliable baseline evidence.
+2. **Conversate+ build track:** implement mic input → transcript → card output once validation is stable.
+
 ## In scope for this issue
 1. **Mobile-first redesign**
    - cleaner typography, tighter spacing, smaller consistent buttons.

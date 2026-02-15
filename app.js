@@ -37,7 +37,7 @@ const ui = {
 
 const GITHUB_EXPORT_SETTINGS_KEY = "starterKit.githubExportSettings.v1";
 const TEST_COUNTER_KEY = "starterKit.testCounter.v1";
-const APP_DIAGNOSTIC_TAG = "diag-v6-payload-normalization";
+const APP_DIAGNOSTIC_TAG = "diag-v7-rerun-guard";
 
 const TESTS = [
   {
@@ -129,6 +129,9 @@ const state = {
     isFresh: true,
     reason: "Not checked yet",
     checkedAt: "",
+  },
+  rerunStability: {
+    consecutivePasses: 0,
   },
 };
 
@@ -475,7 +478,7 @@ async function probeCreateStartup(expectedText) {
   return probeCreateStartupWithPayload(payload);
 }
 
-function normalizeStartupPayload(payloadConfig) {
+function guardStartupPayload(payloadConfig) {
   const normalized = {
     ...payloadConfig,
     textObject: Array.isArray(payloadConfig?.textObject) ? payloadConfig.textObject : [],
@@ -483,10 +486,11 @@ function normalizeStartupPayload(payloadConfig) {
 
   const expectedCount = normalized.textObject.length;
   if (normalized.containerTotalNum !== expectedCount) {
-    addDiagnostic("createStartUpPageContainer.normalized", {
+    addDiagnostic("createStartUpPageContainer.guard", {
       reason: "containerTotalNum did not match textObject length",
       originalContainerTotalNum: normalized.containerTotalNum,
-      normalizedContainerTotalNum: expectedCount,
+      expectedTextObjectLength: expectedCount,
+      action: "corrected_before_send",
     });
     normalized.containerTotalNum = expectedCount;
   }
@@ -495,7 +499,7 @@ function normalizeStartupPayload(payloadConfig) {
 }
 
 async function probeCreateStartupWithPayload(payloadConfig) {
-  const normalizedPayloadConfig = normalizeStartupPayload(payloadConfig);
+  const normalizedPayloadConfig = guardStartupPayload(payloadConfig);
   const payloadSummary = summarizePayload(normalizedPayloadConfig);
   addDiagnostic("createStartUpPageContainer.request", payloadSummary);
   const bridge = await ensureBridge();
@@ -637,7 +641,7 @@ async function runTestById(test, expectedText) {
       addDiagnostic("rerun.stability.strategy", "Using two non-empty containers to avoid payload validation failures from blank container updates.");
 
       const runOne = await probeCreateStartupWithRetry({
-        containerTotalNum: 1,
+        containerTotalNum: 2,
         textObject: [
           {
             xPosition: 0,
@@ -664,7 +668,7 @@ async function runTestById(test, expectedText) {
       await sleep(250);
 
       const runTwo = await probeCreateStartupWithRetry({
-        containerTotalNum: 1,
+        containerTotalNum: 2,
         textObject: [
           {
             xPosition: 0,
@@ -774,15 +778,31 @@ async function runTestFlow() {
   let layoutHint = preview.layoutHint;
   try {
     const result = await runTestById(test, state.expectedText);
+
+    if (test.id === "rerun-update-stability") {
+      state.rerunStability.consecutivePasses = result.startupCreated
+        ? state.rerunStability.consecutivePasses + 1
+        : 0;
+
+      addDiagnostic("rerun.stability.pass_streak", {
+        consecutivePasses: state.rerunStability.consecutivePasses,
+        requiredPasses: 2,
+      });
+    }
+
     startupCreated = result.startupCreated;
     lookFor = result.lookFor;
     layoutHint = result.layoutHint || "";
     ui.lookForViewerPage2.textContent = renderExpectedLines(lookFor);
     ui.expectedLayoutPage2.textContent = layoutHint;
     ui.expectedLayoutPage2.hidden = !layoutHint;
-    ui.runStatus.textContent = result.statusMessage;
-    state.lastRunStatusMessage = result.statusMessage;
-    addDiagnostic("test.status", result.statusMessage);
+    const rerunSuffix = test.id === "rerun-update-stability"
+      ? ` (Stability pass streak: ${state.rerunStability.consecutivePasses}/2)`
+      : "";
+
+    ui.runStatus.textContent = `${result.statusMessage}${rerunSuffix}`;
+    state.lastRunStatusMessage = `${result.statusMessage}${rerunSuffix}`;
+    addDiagnostic("test.status", `${result.statusMessage}${rerunSuffix}`);
   } catch (error) {
     const warning = `Automation warning: ${String(error)}`;
     ui.runStatus.textContent = warning;
@@ -824,6 +844,21 @@ async function saveResult(answer) {
   if (!state.activeRun) return;
   const notes = (ui.notesInput.value || "").trim();
   const needsNotes = answer === "no" || answer === "not-sure";
+
+  if (
+    state.activeRun?.testId === "rerun-update-stability"
+    && answer === "yes"
+    && state.rerunStability.consecutivePasses < 2
+  ) {
+    ui.submitStatus.textContent = "Run this test until you get two consecutive PASS runs before saving PASS.";
+    ui.submitStatus.className = "status err";
+    addDiagnostic("rerun.stability.block_save", {
+      reason: "pass_requires_two_consecutive_successful_runs",
+      consecutivePasses: state.rerunStability.consecutivePasses,
+      requiredPasses: 2,
+    });
+    return;
+  }
 
   if (needsNotes && !notes) {
     ui.submitStatus.textContent = "Please add details before submitting to GitHub.";
